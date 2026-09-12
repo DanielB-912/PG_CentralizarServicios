@@ -1,0 +1,70 @@
+/* 1. TODOS los @import van estrictamente al principio del archivo */
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* 2. Bloques de configuración y variables */
+@theme {
+  --color-background: #0b0f19;      
+  --color-surface: #1e293b;         
+  --color-text-primary: #f8fafc;    
+  --color-primary: #0284c7;         
+  --color-accent: #7c3aed;          
+}
+
+/* 3. Reglas Base nativas */
+@layer base {
+  body {
+    background-color: var(--color-background);
+    color: var(--color-text-primary);
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* 4. Clases de utilidad personalizadas */
+@utility glass-panel {
+  background-color: color-mix(in srgb, var(--color-surface) 50%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid color-mix(in srgb, var(--color-text-primary) 10%, transparent);
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3);
+}
+
+@utility input-field {
+  width: 100%;
+  background-color: color-mix(in srgb, #0f172a 50%, transparent);
+  border: 1px solid #334155;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  color: var(--color-text-primary);
+  transition: all 0.2s ease-in-out;
+  
+  &:focus {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 2px var(--color-primary);
+    border-color: transparent;
+  }
+}
+
+@utility btn-primary {
+  width: 100%;
+  background-image: linear-gradient(to right, var(--color-primary), var(--color-accent));
+  color: #ffffff;
+  font-weight: 600;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3);
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+
+  &:hover {
+    background-image: linear-gradient(to right, #2563eb, #7c3aed);
+    transform: scale(1.02);
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+}

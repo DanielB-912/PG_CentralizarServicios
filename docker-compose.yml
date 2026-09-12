@@ -1,0 +1,62 @@
+services:
+  mysql_db:
+    image: mysql:8.0
+    container_name: servicios_db
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password_segura
+      MYSQL_DATABASE: db_servicios_cbba
+    ports:
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+    networks:
+      - servicios_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: servicios_backend
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    environment:
+      - DB_HOST=mysql_db
+      - DB_USER=root
+      - DB_PASSWORD=root_password_segura
+      - DB_NAME=db_servicios_cbba
+      - DB_PORT=3306
+      - PORT=3001
+      - JWT_SECRET=super_secret_jwt_key_2026_Univalle
+    depends_on:
+      - mysql_db
+    restart: unless-stopped
+    networks:
+      - servicios_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: servicios_frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - servicios_network
+
+networks:
+  servicios_network:
+    driver: bridge
+
+volumes:
+  db_data:

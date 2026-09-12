@@ -1,0 +1,25 @@
+# Dependencias y compilación
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Entornos y secretos
+.env
+.env.local
+.env.*.local
+
+# Persistencia local y base de datos Docker
+database/data/
+database/mysql_data/
+
+# Archivos multimedia de prueba subidos localmente
+uploads/
+backend/uploads/
+
+# Sistema y logs
+.DS_Store
+Thumbs.db
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
