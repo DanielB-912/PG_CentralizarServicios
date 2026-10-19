@@ -1,6 +1,6 @@
 import { useState, useContext, useRef, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { Wallet, Clock, LogOut, Plus, UploadCloud, X, FileText, Check, UserCircle, MapPin, Send, Loader2, ListTodo, CheckCircle } from 'lucide-react';
+import { Wallet, Clock, LogOut, Plus, UploadCloud, X, FileText, Check, UserCircle, MapPin, Send, Loader2, ListTodo, CheckCircle, AlertTriangle, Lock } from 'lucide-react';
 import { ProfileModal } from '../components/ProfileModal';
 import { GlobalVoiceAssistant } from '../components/GlobalVoiceAssistant';
 import { toast } from 'react-hot-toast';
@@ -182,6 +182,13 @@ const GeoQuoteAddress = ({ lat, lng, fallback }: { lat: number, lng: number, fal
 export const DashboardTecnico = () => {
   const { user, token, logout } = useContext(AuthContext);
 
+  // Profile
+  const [prestadorProfile, setPrestadorProfile] = useState<any>(null);
+
+  const isSuspended = user?.estado_activo === 0 || user?.estado_activo === false || 
+                      user?.prestador?.estado_activo === 0 || user?.prestador?.estado_activo === false ||
+                      prestadorProfile?.estado_activo === 0 || prestadorProfile?.estado_activo === false;
+
   // Wallet state
   const [balance, setBalance] = useState(0);
   const [showWalletModal, setShowWalletModal] = useState(false);
@@ -200,11 +207,9 @@ export const DashboardTecnico = () => {
   const [ofertaMensaje, setOfertaMensaje] = useState('');
   const [solicitudSeleccionada, setSolicitudSeleccionada] = useState<number | null>(null);
 
-  // Profile
+  // Profile modal & dropdown
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
-
-  const [prestadorProfile, setPrestadorProfile] = useState<any>(null);
 
   const [activeTab, setActiveTab] = useState<'feed' | 'cotizaciones' | 'resenas'>('feed');
   const [misCotizaciones, setMisCotizaciones] = useState<any[]>([]);
@@ -276,6 +281,11 @@ export const DashboardTecnico = () => {
   };
 
   const fetchFeed = async () => {
+    if (isSuspended) {
+      setLoadingFeed(false);
+      setFeed([]);
+      return;
+    }
     setLoadingFeed(true);
     try {
       const res = await fetch('http://localhost:3001/api/solicitudes/feed', {
@@ -414,6 +424,10 @@ export const DashboardTecnico = () => {
 
   const enviarOferta = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSuspended) {
+      toast.error('Cuenta suspendida temporalmente por la administración. No puedes enviar cotizaciones.');
+      return;
+    }
     if (!solicitudSeleccionada) return;
     try {
       const res = await fetch('http://localhost:3001/api/ofertas', {
@@ -447,6 +461,10 @@ export const DashboardTecnico = () => {
   };
 
   const handleAceptarContraoferta = async (id_solicitud: number, monto_ofertado: number) => {
+    if (isSuspended) {
+      toast.error('Cuenta suspendida temporalmente por la administración.');
+      return;
+    }
     try {
       const res = await axios.post('http://localhost:3001/api/vinculaciones/aceptar', {
         id_solicitud,
@@ -466,6 +484,10 @@ export const DashboardTecnico = () => {
   };
 
   const handleRecotizarOferta = async (id_oferta: number) => {
+    if (isSuspended) {
+      toast.error('Cuenta suspendida temporalmente por la administración.');
+      return;
+    }
     if (!recotizarForm.monto) {
       toast.error('Ingresa un monto válido');
       return;
@@ -499,29 +521,31 @@ export const DashboardTecnico = () => {
             <p className="text-xs text-textSecondary">{user?.prestador ? `${user.prestador.especialidad} • ${user.prestador.macrodistrito}` : user?.rol}</p>
           </div>
 
-          <GlobalVoiceAssistant 
-            role="PRESTADOR_TECNICO"
-            onCommand={(action, _payload) => {
-              if (action === 'FOCUS_CREDENCIALES') {
-                const credencialesPanel = document.getElementById('credenciales-panel');
-                if (credencialesPanel) {
-                  credencialesPanel.scrollIntoView({ behavior: 'smooth' });
-                  credencialesPanel.classList.add('ring-4', 'ring-primary', 'animate-pulse');
-                  setTimeout(() => credencialesPanel.classList.remove('ring-4', 'ring-primary', 'animate-pulse'), 3000);
-                } else {
-                  setShowProfileModal(true);
+          {!isSuspended && (
+            <GlobalVoiceAssistant 
+              role="PRESTADOR_TECNICO"
+              onCommand={(action, _payload) => {
+                if (action === 'FOCUS_CREDENCIALES') {
+                  const credencialesPanel = document.getElementById('credenciales-panel');
+                  if (credencialesPanel) {
+                    credencialesPanel.scrollIntoView({ behavior: 'smooth' });
+                    credencialesPanel.classList.add('ring-4', 'ring-primary', 'animate-pulse');
+                    setTimeout(() => credencialesPanel.classList.remove('ring-4', 'ring-primary', 'animate-pulse'), 3000);
+                  } else {
+                    setShowProfileModal(true);
+                  }
+                } else if (action === 'NAVIGATE_DEMANDAS' || action === 'NAVIGATE_MAPA_DEMANDAS') {
+                  setActiveTab('feed');
+                } else if (action === 'NAVIGATE_COTIZACIONES') {
+                  setActiveTab('cotizaciones');
+                } else if (action === 'NAVIGATE_RESENAS') {
+                  setActiveTab('resenas');
+                } else if (action === 'NAVIGATE_MONEDERO' || action === 'OPEN_WALLET') {
+                  setShowWalletModal(true);
                 }
-              } else if (action === 'NAVIGATE_MAPA_DEMANDAS') {
-                setActiveTab('feed');
-              } else if (action === 'NAVIGATE_COTIZACIONES') {
-                setActiveTab('cotizaciones');
-              } else if (action === 'NAVIGATE_RESENAS') {
-                setActiveTab('resenas');
-              } else if (action === 'OPEN_WALLET') {
-                setShowWalletModal(true);
-              }
-            }}
-          />
+              }}
+            />
+          )}
 
           <button onClick={() => setShowDropdown(!showDropdown)} className="focus:outline-none">
             <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-accent to-primary flex items-center justify-center text-white font-bold shadow-lg overflow-hidden border-2 border-indigo-500">
@@ -546,6 +570,25 @@ export const DashboardTecnico = () => {
             )}
         </div>
       </header>
+
+      {isSuspended && (
+        <div className="bg-red-950/80 border-b border-red-500/40 px-6 py-3.5 flex items-center justify-between gap-4 text-red-200 shadow-md">
+          <div className="flex items-center gap-3">
+            <div className="p-1.5 bg-red-500/20 text-red-400 rounded-lg shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <p className="text-sm font-medium">
+              Cuenta suspendida temporalmente por la administración. Comuníquese con soporte para regularizar su cuenta o saldar comisiones pendientes.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowWalletModal(true)}
+            className="text-xs bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 px-3.5 py-1.5 rounded-lg transition-colors font-semibold shrink-0"
+          >
+            Regularizar en Monedero
+          </button>
+        </div>
+      )}
 
       {/* Content */}
       <main className="flex-1 flex flex-col overflow-hidden">
@@ -676,6 +719,25 @@ export const DashboardTecnico = () => {
                     <h4 className="font-bold">Paso 2: Sube tu CI o acreditación para validación del Administrador</h4>
                     <p className="text-sm">Utiliza el panel de "Validación de Credenciales" para subir tus documentos y ser habilitado.</p>
                   </div>
+                </div>
+              )}
+
+              {isSuspended && (
+                <div className="absolute inset-0 z-50 bg-slate-900/95 backdrop-blur-md rounded-2xl flex flex-col items-center justify-center p-8 text-center border border-red-500/40 shadow-2xl">
+                  <div className="bg-red-500/20 p-4 rounded-full mb-4 ring-4 ring-red-500/10">
+                    <Lock className="h-10 w-10 text-red-400" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white mb-2">Cuenta Suspendida Temporalmente</h2>
+                  <p className="text-textSecondary max-w-md mb-6 leading-relaxed">
+                    Cuenta suspendida temporalmente por la administración. Comuníquese con soporte para regularizar su cuenta o saldar comisiones pendientes.
+                  </p>
+                  <button
+                    onClick={() => setShowWalletModal(true)}
+                    className="bg-accent hover:bg-violet-600 text-white px-6 py-2.5 rounded-xl font-medium transition-all shadow-lg shadow-accent/25 flex items-center gap-2"
+                  >
+                    <Wallet className="w-4 h-4" />
+                    Regularizar Saldo en Monedero
+                  </button>
                 </div>
               )}
 
@@ -833,8 +895,13 @@ export const DashboardTecnico = () => {
                             <div className="flex gap-3">
                               <input 
                                 type="number" 
-                                step="0.50" 
+                                step="any" 
                                 min="1" 
+                                onKeyDown={(e) => {
+                                  if (['e', 'E', '+', '-'].includes(e.key)) {
+                                    e.preventDefault();
+                                  }
+                                }}
                                 placeholder="Monto en Bs. (ej. 150)" 
                                 value={ofertaMonto} 
                                 onChange={(e) => setOfertaMonto(e.target.value)} 
@@ -942,6 +1009,13 @@ export const DashboardTecnico = () => {
                               <div className="bg-slate-800 p-2 rounded-lg border border-slate-700 w-full flex flex-col gap-2 mt-1">
                                 <input 
                                   type="number" 
+                                  step="any"
+                                  min="1"
+                                  onKeyDown={(e) => {
+                                    if (['e', 'E', '+', '-'].includes(e.key)) {
+                                      e.preventDefault();
+                                    }
+                                  }}
                                   placeholder="Nuevo Monto Bs." 
                                   className="input-field py-1 px-2 text-xs"
                                   value={recotizarForm.monto}
@@ -1076,8 +1150,13 @@ export const DashboardTecnico = () => {
                     <input
                       type="number"
                       min="1"
-                      step="0.1"
+                      step="any"
                       required
+                      onKeyDown={(e) => {
+                        if (['e', 'E', '+', '-'].includes(e.key)) {
+                          e.preventDefault();
+                        }
+                      }}
                       placeholder="0.00"
                       className="input-field pl-12 text-lg font-medium"
                       value={customAmount}

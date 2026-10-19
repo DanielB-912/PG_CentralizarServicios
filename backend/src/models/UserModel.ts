@@ -24,7 +24,7 @@ export class UserModel {
              (SELECT COUNT(*) FROM credenciales c WHERE c.id_usuario = u.id_usuario AND c.estado_validacion = 'APROBADO') as credenciales_aprobadas
       FROM usuarios u
       LEFT JOIN prestadores p ON u.id_usuario = p.id_usuario
-      WHERE u.email = ? AND u.estado_activo = TRUE
+      WHERE u.email = ?
     `;
     const [rows] = await pool.execute<RowDataPacket[]>(query, [email]);
     if (rows.length > 0) {
@@ -65,7 +65,7 @@ export class UserModel {
 
   static async findById(id: number): Promise<User | null> {
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT id_usuario, email, password_hash, nombres, apellidos, telefono, direccion, foto_url, rol, estado_activo, fecha_registro FROM usuarios WHERE id_usuario = ? AND estado_activo = TRUE`,
+      `SELECT id_usuario, email, password_hash, nombres, apellidos, telefono, direccion, foto_url, rol, estado_activo, fecha_registro FROM usuarios WHERE id_usuario = ?`,
       [id]
     );
     if (rows.length > 0) {
@@ -85,20 +85,48 @@ export class UserModel {
     return result.insertId;
   }
 
-  static async findAll(): Promise<User[]> {
+  static async findAll(): Promise<any[]> {
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT id_usuario, email, nombres, apellidos, telefono, direccion, rol, estado_activo, fecha_registro, foto_url 
-       FROM usuarios 
-       WHERE estado_activo = TRUE`
+      `SELECT u.id_usuario, u.email, u.nombres, u.apellidos, u.telefono, u.direccion, u.rol, u.estado_activo, u.fecha_registro, u.foto_url,
+              p.id_prestador, p.especialidad, p.descripcion_profesional, p.disponibilidad_horaria, 
+              p.zona_cobertura, p.macrodistrito, p.lat_cobertura, p.lng_cobertura, p.radio_cobertura, p.saldo,
+              (SELECT COUNT(*) FROM credenciales c WHERE c.id_usuario = u.id_usuario) as total_credenciales,
+              (SELECT COUNT(*) FROM credenciales c WHERE c.id_usuario = u.id_usuario AND c.estado_validacion = 'APROBADO') as credenciales_aprobadas
+       FROM usuarios u
+       LEFT JOIN prestadores p ON u.id_usuario = p.id_usuario
+       ORDER BY u.id_usuario DESC`
     );
-    return rows as User[];
+    return rows;
+  }
+
+  static async toggleEstadoActivo(id: number, nuevoEstado?: number): Promise<number> {
+    let targetEstado: number;
+    if (nuevoEstado !== undefined && (nuevoEstado === 0 || nuevoEstado === 1)) {
+      targetEstado = nuevoEstado;
+    } else {
+      const [rows] = await pool.execute<RowDataPacket[]>(
+        `SELECT estado_activo FROM usuarios WHERE id_usuario = ?`,
+        [id]
+      );
+      if (rows.length === 0) throw new Error('Usuario no encontrado');
+      const current = Number(rows[0].estado_activo);
+      targetEstado = current === 1 ? 0 : 1;
+    }
+
+    await pool.execute(
+      `UPDATE usuarios SET estado_activo = ? WHERE id_usuario = ?`,
+      [targetEstado, id]
+    );
+    await pool.execute(
+      `UPDATE prestadores SET estado_activo = ? WHERE id_usuario = ?`,
+      [targetEstado, id]
+    );
+
+    return targetEstado;
   }
 
   static async softDelete(id: number): Promise<void> {
-    await pool.execute(
-      `UPDATE usuarios SET estado_activo = FALSE WHERE id_usuario = ?`,
-      [id]
-    );
+    await this.toggleEstadoActivo(id, 0);
   }
 
   static async updateProfile(id: number, data: Partial<User>): Promise<void> {

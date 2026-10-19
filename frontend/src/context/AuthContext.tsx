@@ -3,19 +3,24 @@ import axios from 'axios';
 
 interface User {
   id: string;
+  id_usuario?: number;
   email: string;
   rol: 'ADMINISTRADOR' | 'PRESTADOR_TECNICO' | 'CLIENTE';
   nombres: string;
   apellidos: string;
   telefono?: string;
   foto_url?: string;
+  estado_activo?: number | boolean;
   prestador?: {
+    id_prestador?: number;
     especialidad?: string;
     zona_cobertura?: string;
     macrodistrito?: string;
     lat_cobertura?: number;
     lng_cobertura?: number;
     radio_cobertura?: number;
+    saldo?: number;
+    estado_activo?: number | boolean;
   };
 }
 

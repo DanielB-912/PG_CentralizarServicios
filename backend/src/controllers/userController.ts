@@ -15,8 +15,28 @@ export class UserController {
   static async softDeleteUser(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      await UserModel.softDelete(parseInt(id));
-      res.json({ message: 'Usuario desactivado correctamente' });
+      const nuevoEstado = await UserModel.toggleEstadoActivo(parseInt(id));
+      res.json({ 
+        message: nuevoEstado === 1 ? 'Usuario reactivado correctamente' : 'Usuario desactivado correctamente',
+        estado_activo: nuevoEstado 
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async toggleUserStatus(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { estado_activo } = req.body;
+      const nuevoEstado = await UserModel.toggleEstadoActivo(
+        parseInt(id), 
+        estado_activo !== undefined ? Number(estado_activo) : undefined
+      );
+      res.json({ 
+        message: nuevoEstado === 1 ? 'Usuario reactivado correctamente' : 'Usuario desactivado correctamente',
+        estado_activo: nuevoEstado 
+      });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

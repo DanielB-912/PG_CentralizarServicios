@@ -1,6 +1,6 @@
 import { useState, useContext, useEffect, useRef } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { LogOut, Search, MapPin, Map as MapIcon, History, Star, X, Loader2, Send, CheckCircle, UserCircle, Phone, Mic, MicOff } from 'lucide-react';
+import { LogOut, Search, MapPin, Map as MapIcon, History, Star, X, Loader2, Send, CheckCircle, UserCircle, Mic } from 'lucide-react';
 import { ProfileModal } from '../components/ProfileModal';
 import { TecnicoPublicProfileModal } from '../components/TecnicoPublicProfileModal';
 import { GlobalVoiceAssistant } from '../components/GlobalVoiceAssistant';
@@ -276,12 +276,23 @@ export const DashboardCliente = () => {
       );
     }
   };
-  const [isListening, setIsListening] = useState(false);
+  const [dictadoState, setDictadoState] = useState<'inactivo' | 'escuchando' | 'analizando'>('inactivo');
+  const dictadoStateRef = useRef<'inactivo' | 'escuchando' | 'analizando'>('inactivo');
   const recognitionRef = useRef<any>(null);
   const analyzeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const voiceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const updateDictadoState = (s: 'inactivo' | 'escuchando' | 'analizando') => {
+    dictadoStateRef.current = s;
+    setDictadoState(s);
+  };
 
   const procesarInferenciaSemantica = async (texto: string) => {
-    if (!texto || texto.trim().length < 4) return;
+    if (!texto || texto.trim().length < 4) {
+      updateDictadoState('inactivo');
+      return;
+    }
+    updateDictadoState('analizando');
     try {
       const token = localStorage.getItem('token');
       const res = await axios.post('http://localhost:3001/api/ai/intent', { prompt: texto, userRole: 'CLIENTE' }, {
@@ -305,6 +316,8 @@ export const DashboardCliente = () => {
       }
     } catch (e) {
       console.error("Error al procesar inferencia:", e);
+    } finally {
+      updateDictadoState('inactivo');
     }
   };
 
@@ -336,8 +349,6 @@ export const DashboardCliente = () => {
       recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = 'es-BO';
-      
-      let voiceTimeout: ReturnType<typeof setTimeout>;
 
       recognitionRef.current.onresult = async (event: any) => {
         let finalTranscript = '';
@@ -350,33 +361,49 @@ export const DashboardCliente = () => {
         if (finalTranscript) {
           setRequestForm(prev => ({ ...prev, descripcion: finalTranscript }));
           
-          if (voiceTimeout) clearTimeout(voiceTimeout);
-          voiceTimeout = setTimeout(async () => {
+          if (voiceTimeoutRef.current) clearTimeout(voiceTimeoutRef.current);
+          voiceTimeoutRef.current = setTimeout(async () => {
+            try {
+              recognitionRef.current?.stop();
+            } catch {}
+            updateDictadoState('analizando');
             await procesarInferenciaSemantica(finalTranscript);
-            recognitionRef.current?.stop();
           }, 1500); // 1.5 segundos de pausa natural antes de procesar y detener
         }
       };
 
       recognitionRef.current.onerror = (event: any) => {
         console.error('Error de reconocimiento de voz', event);
-        setIsListening(false);
+        if (voiceTimeoutRef.current) clearTimeout(voiceTimeoutRef.current);
+        updateDictadoState('inactivo');
       };
       
       recognitionRef.current.onend = () => {
-        setIsListening(false);
+        if (dictadoStateRef.current === 'escuchando') {
+          updateDictadoState('inactivo');
+        }
       };
     }
   }, [selectedCategory]);
 
   const toggleListen = () => {
-    if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
+    if (dictadoState === 'analizando') return;
+
+    if (dictadoState === 'escuchando') {
+      try {
+        recognitionRef.current?.stop();
+      } catch {}
+      if (voiceTimeoutRef.current) clearTimeout(voiceTimeoutRef.current);
+      updateDictadoState('inactivo');
     } else {
       if (recognitionRef.current) {
-        recognitionRef.current.start();
-        setIsListening(true);
+        try {
+          recognitionRef.current.start();
+          updateDictadoState('escuchando');
+        } catch (err) {
+          console.error("Error al iniciar reconocimiento de voz:", err);
+          updateDictadoState('inactivo');
+        }
       } else {
         toast.error("Tu navegador no soporta reconocimiento de voz.");
       }
@@ -454,10 +481,32 @@ export const DashboardCliente = () => {
               <div className="mb-6 flex gap-2">
                 <button
                   onClick={toggleListen}
-                  className={`flex-1 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-all ${isListening ? 'bg-red-500/20 text-red-400 border border-red-500/50 animate-pulse' : 'bg-primary hover:bg-indigo-600 text-white'}`}
+                  disabled={dictadoState === 'analizando'}
+                  className={`flex-1 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-all ${
+                    dictadoState === 'escuchando'
+                      ? 'bg-red-500/20 text-red-400 border border-red-500/50 animate-pulse ring-2 ring-red-500/20'
+                      : dictadoState === 'analizando'
+                      ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 cursor-not-allowed opacity-90'
+                      : 'bg-primary hover:bg-indigo-600 text-white'
+                  }`}
                 >
-                  {isListening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-                  {isListening ? 'Escuchando...' : 'Dictar Solicitud'}
+                  {dictadoState === 'escuchando' ? (
+                    <>
+                      <span className="h-2 w-2 rounded-full bg-red-500 animate-ping" />
+                      <Mic className="h-5 w-5 text-red-400" />
+                      <span>Escuchando...</span>
+                    </>
+                  ) : dictadoState === 'analizando' ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin text-indigo-300" />
+                      <span>Analizando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="h-5 w-5" />
+                      <span>Dictar Solicitud</span>
+                    </>
+                  )}
                 </button>
               </div>
 
@@ -477,10 +526,18 @@ export const DashboardCliente = () => {
                       <div className="flex-1">
                         <h3 className="text-white font-medium">{tech.nombres} {tech.apellidos}</h3>
                         <p className="text-textSecondary text-xs">{tech.especialidad}</p>
-                        <div className="flex items-center gap-1 mt-1">
-                          <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
-                          <span className="text-amber-400 text-xs font-medium">{parseFloat(tech.calificacion_promedio || '0').toFixed(1)}</span>
-                        </div>
+                        {parseFloat(tech.calificacion_promedio || '0') > 0 ? (
+                          <div className="flex items-center gap-1 mt-1">
+                            <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
+                            <span className="text-amber-400 text-xs font-medium">{parseFloat(tech.calificacion_promedio || '0').toFixed(1)}</span>
+                          </div>
+                        ) : (
+                          <div className="mt-1">
+                            <span className="text-xs bg-slate-700/60 text-slate-300 px-2 py-0.5 rounded-full border border-slate-600/50 inline-block">
+                              Nuevo talento
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <button 
@@ -559,15 +616,28 @@ export const DashboardCliente = () => {
                     <div>
                       <h4 className="text-xl font-bold text-white">{selectedTechnician.name}</h4>
                       <p className={`text-${selectedTechnician.color}-400 font-medium`}>{selectedTechnician.specialty}</p>
+                      {parseFloat(selectedTechnician.rating || selectedTechnician.calificacion_promedio || '0') > 0 ? (
+                        <div className="flex items-center text-amber-400 text-xs font-medium mt-1">
+                          <Star className="h-3 w-3 fill-amber-400 mr-1" />
+                          {parseFloat(selectedTechnician.rating || selectedTechnician.calificacion_promedio || '0').toFixed(1)}
+                        </div>
+                      ) : (
+                        <div className="mt-1">
+                          <span className="text-xs bg-slate-700/60 text-slate-300 px-2 py-0.5 rounded-full border border-slate-600/50 inline-block">
+                            Nuevo talento
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   <div className="flex gap-2 mb-6">
-                    <button className="flex-1 bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-xl border border-slate-600 transition-colors flex items-center justify-center gap-2">
+                    {/* Botón contactar ocultado para no exponer datos antes de concretar la vinculación laboral */}
+                    {/* <button className="flex-1 bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-xl border border-slate-600 transition-colors flex items-center justify-center gap-2">
                       <Phone className="h-4 w-4" /> Contactar
-                    </button>
-                    <button className="flex-1 btn-primary py-2 flex items-center justify-center gap-2">
-                      <Send className="h-4 w-4" /> Solicitar
+                    </button> */}
+                    <button onClick={() => setShowNewRequestForm('expanded')} className="flex-1 btn-primary py-2 flex items-center justify-center gap-2">
+                      <Send className="h-4 w-4" /> Solicitar Servicio
                     </button>
                   </div>
 
@@ -659,15 +729,63 @@ export const DashboardCliente = () => {
                     <div>
                       <div className="flex justify-between items-center mb-1">
                         <label className="block text-sm text-textSecondary">Descripción del problema</label>
-                        <button type="button" onClick={toggleListen} className={`p-1.5 rounded-full ${isListening ? 'bg-red-500/20 text-red-400 animate-pulse' : 'bg-slate-700 text-slate-300 hover:text-white'}`}>
-                          {isListening ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                        <button 
+                          type="button" 
+                          onClick={toggleListen} 
+                          disabled={dictadoState === 'analizando'}
+                          className={`px-3 py-1 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 ${
+                            dictadoState === 'escuchando'
+                              ? 'bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse ring-2 ring-red-500/20'
+                              : dictadoState === 'analizando'
+                              ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 cursor-not-allowed opacity-90'
+                              : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-600/50'
+                          }`}
+                          title={
+                            dictadoState === 'escuchando'
+                              ? 'Escuchando tu voz...'
+                              : dictadoState === 'analizando'
+                              ? 'Analizando...'
+                              : 'Dictar descripción por voz'
+                          }
+                        >
+                          {dictadoState === 'escuchando' ? (
+                            <>
+                              <span className="h-2 w-2 rounded-full bg-red-500 animate-ping" />
+                              <Mic className="h-3.5 w-3.5 text-red-400" />
+                              <span>Escuchando...</span>
+                            </>
+                          ) : dictadoState === 'analizando' ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-400" />
+                              <span>Analizando...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Mic className="h-3.5 w-3.5 text-slate-400" />
+                              <span>Dictar</span>
+                            </>
+                          )}
                         </button>
                       </div>
                       <textarea required className="input-field min-h-[80px] resize-none" placeholder={`Habla o escribe aquí...`} value={requestForm.descripcion} onChange={handleTextChange}></textarea>
                     </div>
                     <div>
                       <label className="block text-sm text-textSecondary mb-1">Presupuesto Estimado (Bs.)</label>
-                      <input required type="number" min="10" className="input-field" placeholder="100.00" value={requestForm.presupuesto} onChange={e => setRequestForm({...requestForm, presupuesto: e.target.value})} />
+                      <input 
+                        required 
+                        type="number" 
+                        min="1" 
+                        step="any"
+                        onKeyDown={(e) => {
+                          if (['e', 'E', '+', '-'].includes(e.key)) {
+                            e.preventDefault();
+                          }
+                        }}
+                        className="input-field" 
+                        placeholder="100.00" 
+                        value={requestForm.presupuesto} 
+                        onChange={e => setRequestForm({...requestForm, presupuesto: e.target.value})} 
+                      />
                     </div>
                     <div>
                       <label className="block text-sm text-textSecondary mb-1">Dirección / Referencia</label>
@@ -788,7 +906,11 @@ export const DashboardCliente = () => {
                                   <div className="flex items-center gap-2 text-xs text-textSecondary">
                                     <span>{oferta.especialidad}</span>
                                     <span>•</span>
-                                    <span className="flex items-center text-amber-400"><Star className="h-3 w-3 fill-amber-400 mr-1"/> {parseFloat(oferta.calificacion_promedio || '0').toFixed(1)}</span>
+                                    {parseFloat(oferta.calificacion_promedio || '0') > 0 ? (
+                                      <span className="flex items-center text-amber-400"><Star className="h-3 w-3 fill-amber-400 mr-1"/> {parseFloat(oferta.calificacion_promedio || '0').toFixed(1)}</span>
+                                    ) : (
+                                      <span className="text-xs bg-slate-700/60 text-slate-300 px-2 py-0.5 rounded-full border border-slate-600/50">Nuevo talento</span>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -805,6 +927,13 @@ export const DashboardCliente = () => {
                                   <div className="bg-slate-800 p-3 rounded-lg border border-slate-700 w-full flex flex-col gap-2 mt-2">
                                     <input 
                                       type="number" 
+                                      min="1"
+                                      step="any"
+                                      onKeyDown={(e) => {
+                                        if (['e', 'E', '+', '-'].includes(e.key)) {
+                                          e.preventDefault();
+                                        }
+                                      }}
                                       placeholder="Monto Bs." 
                                       className="input-field py-1 px-2 text-sm"
                                       value={contraofertaForm.monto}
@@ -884,9 +1013,17 @@ export const DashboardCliente = () => {
                       <div>
                         <h3 className="text-white font-bold">{tech.nombres} {tech.apellidos}</h3>
                         <p className="text-primary text-sm">{tech.especialidad}</p>
-                        <div className="flex items-center gap-1 mt-1 text-amber-400 text-xs">
-                          <Star className="h-3 w-3 fill-amber-400" />
-                          <span>{parseFloat(tech.calificacion_promedio || '0').toFixed(1)}</span>
+                        <div className="flex items-center gap-1 mt-1 text-xs">
+                          {parseFloat(tech.calificacion_promedio || '0') > 0 ? (
+                            <span className="flex items-center text-amber-400">
+                              <Star className="h-3 w-3 fill-amber-400 mr-1" />
+                              <span>{parseFloat(tech.calificacion_promedio || '0').toFixed(1)}</span>
+                            </span>
+                          ) : (
+                            <span className="text-xs bg-slate-700/60 text-slate-300 px-2 py-0.5 rounded-full border border-slate-600/50">
+                              Nuevo talento
+                            </span>
+                          )}
                           <span className="text-textSecondary ml-2">• {tech.macrodistrito}</span>
                         </div>
                       </div>
@@ -945,29 +1082,31 @@ export const DashboardCliente = () => {
             <p className="text-xs text-textSecondary">{user?.rol}</p>
           </div>
           
-          <GlobalVoiceAssistant 
-            role="CLIENTE" 
-            onCommand={(action, payload) => {
-              if (action === 'OPEN_SOLICITUD_MODAL') {
-                setActiveTab('mapa');
-                setShowNewRequestForm('expanded');
-                if (payload?.categoriaInferida) {
-                  setSelectedCategory(payload.categoriaInferida);
+          {showNewRequestForm !== 'expanded' && (
+            <GlobalVoiceAssistant 
+              role="CLIENTE" 
+              onCommand={(action, payload) => {
+                if (action === 'OPEN_SOLICITUD_MODAL' || action === 'NAVIGATE_NUEVA_SOLICITUD') {
+                  setActiveTab('mapa');
+                  setShowNewRequestForm('expanded');
+                  if (payload?.categoriaInferida) {
+                    setSelectedCategory(payload.categoriaInferida);
+                  }
+                  if (payload?.resumenProblema) {
+                    setRequestForm(prev => ({ ...prev, descripcion: payload.resumenProblema }));
+                  } else {
+                    setRequestForm(prev => ({ ...prev, descripcion: '' }));
+                  }
+                } else if (action === 'NAVIGATE_HISTORIAL') {
+                  setActiveTab('historial');
+                } else if (action === 'NAVIGATE_MAPA') {
+                  setActiveTab('mapa');
+                } else if (action === 'NAVIGATE_DIRECTORIO') {
+                  setActiveTab('directorio');
                 }
-                if (payload?.resumenProblema) {
-                  setRequestForm(prev => ({ ...prev, descripcion: payload.resumenProblema }));
-                } else {
-                  setRequestForm(prev => ({ ...prev, descripcion: '' }));
-                }
-              } else if (action === 'NAVIGATE_HISTORIAL') {
-                setActiveTab('historial');
-              } else if (action === 'NAVIGATE_MAPA') {
-                setActiveTab('mapa');
-              } else if (action === 'NAVIGATE_DIRECTORIO') {
-                setActiveTab('directorio');
-              }
-            }} 
-          />
+              }} 
+            />
+          )}
 
           <button onClick={() => setShowDropdown(!showDropdown)} className="focus:outline-none">
               <div className="h-10 w-10 rounded-full bg-accent text-white flex items-center justify-center font-bold shadow-lg overflow-hidden border-2 border-indigo-500">

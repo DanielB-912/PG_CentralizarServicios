@@ -20,7 +20,7 @@ export class ConfiguracionModel {
   }
 
   static async getTasaComision(): Promise<number> {
-    const valor = await this.getValor('tasa_comision_porcentaje');
+    const valor = (await this.getValor('tasa_comision')) || (await this.getValor('tasa_comision_porcentaje'));
     return valor ? parseFloat(valor) : 5.00;
   }
 }

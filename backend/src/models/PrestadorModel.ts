@@ -34,7 +34,7 @@ export class PrestadorModel {
       `SELECT p.*, 
        EXISTS(SELECT 1 FROM credenciales c WHERE c.id_usuario = p.id_usuario AND c.estado_validacion = 'APROBADO') as has_approved_credential,
        (SELECT JSON_ARRAYAGG(JSON_OBJECT('id_credencial', c.id_credencial, 'tipo_documento', c.tipo_documento, 'estado_validacion', c.estado_validacion, 'documento_url', c.documento_url)) FROM credenciales c WHERE c.id_usuario = p.id_usuario) as credenciales
-       FROM prestadores p WHERE p.id_usuario = ? AND p.estado_activo = TRUE`,
+       FROM prestadores p WHERE p.id_usuario = ?`,
       [id_usuario]
     );
     if (rows.length > 0) {
@@ -45,7 +45,7 @@ export class PrestadorModel {
 
   static async findById(id_prestador: number): Promise<Prestador | null> {
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT * FROM prestadores WHERE id_prestador = ? AND estado_activo = TRUE`,
+      `SELECT * FROM prestadores WHERE id_prestador = ?`,
       [id_prestador]
     );
     if (rows.length > 0) {
@@ -80,7 +80,7 @@ export class PrestadorModel {
               WHERE v.id_prestador = p.id_prestador) as calificacion_promedio
       FROM prestadores p
       INNER JOIN usuarios u ON p.id_usuario = u.id_usuario
-      WHERE p.estado_activo = TRUE AND u.estado_activo = TRUE
+      WHERE u.estado_activo = 1 AND p.estado_activo = 1
     `;
     const params: any[] = [];
 
@@ -107,7 +107,7 @@ export class PrestadorModel {
              (SELECT JSON_ARRAYAGG(documento_url) FROM credenciales cr WHERE cr.id_usuario = p.id_usuario AND cr.estado_validacion = 'APROBADO') as documentos
       FROM prestadores p
       INNER JOIN usuarios u ON p.id_usuario = u.id_usuario
-      WHERE p.estado_activo = TRUE AND u.estado_activo = TRUE 
+      WHERE u.estado_activo = 1 AND p.estado_activo = 1 
         AND EXISTS (SELECT 1 FROM credenciales cr WHERE cr.id_usuario = p.id_usuario AND cr.estado_validacion = 'APROBADO')
     `;
     const [rows] = await pool.execute<RowDataPacket[]>(query);
@@ -125,7 +125,7 @@ export class PrestadorModel {
              (SELECT JSON_ARRAYAGG(documento_url) FROM credenciales cr WHERE cr.id_usuario = p.id_usuario AND cr.estado_validacion = 'APROBADO') as documentos
       FROM prestadores p
       INNER JOIN usuarios u ON p.id_usuario = u.id_usuario
-      WHERE p.estado_activo = TRUE AND u.estado_activo = TRUE 
+      WHERE u.estado_activo = 1 AND p.estado_activo = 1 
         AND EXISTS (SELECT 1 FROM credenciales cr WHERE cr.id_usuario = p.id_usuario AND cr.estado_validacion = 'APROBADO')
         AND p.macrodistrito = ?
     `;
@@ -153,7 +153,7 @@ export class PrestadorModel {
              (SELECT JSON_ARRAYAGG(JSON_OBJECT('tipo_documento', cr.tipo_documento, 'documento_url', cr.documento_url)) FROM credenciales cr WHERE cr.id_usuario = p.id_usuario AND cr.estado_validacion = 'APROBADO') as documentos
       FROM prestadores p
       INNER JOIN usuarios u ON p.id_usuario = u.id_usuario
-      WHERE p.id_prestador = ? AND p.estado_activo = TRUE AND u.estado_activo = TRUE 
+      WHERE p.id_prestador = ? AND u.estado_activo = 1 AND p.estado_activo = 1 
     `;
     const [rows] = await pool.execute<RowDataPacket[]>(query, [id_prestador]);
     if (rows.length > 0) {

@@ -14,6 +14,20 @@ export const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      setError('Por favor, ingresa un correo electrónico válido');
+      return;
+    }
+
+    if (!cleanPassword) {
+      setError('Por favor, ingresa tu contraseña');
+      return;
+    }
+
     try {
       // Purge existing tokens before login to prevent desync
       localStorage.removeItem('token');
@@ -21,8 +35,8 @@ export const Login = () => {
       delete axios.defaults.headers.common['Authorization'];
 
       const res = await axios.post('http://localhost:3001/api/auth/login', {
-        email: email,
-        contrasena: password
+        email: cleanEmail,
+        contrasena: cleanPassword
       });
       login(res.data.token, res.data.user);
       

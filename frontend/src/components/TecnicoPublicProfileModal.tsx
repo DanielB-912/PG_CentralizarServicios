@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Star, Phone, CheckCircle, FileText, MapPin } from 'lucide-react';
+import { X, Star, CheckCircle, FileText, MapPin } from 'lucide-react';
 import axios from 'axios';
 import { MapContainer, TileLayer, Marker, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -93,17 +93,24 @@ export const TecnicoPublicProfileModal: React.FC<TecnicoPublicProfileModalProps>
                 <h2 className="text-3xl font-bold text-white mb-1">{profile.nombres} {profile.apellidos}</h2>
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
                   <span className="bg-primary/20 text-primary px-3 py-1 rounded-full text-sm font-medium">{profile.especialidad}</span>
-                  <span className="flex items-center text-amber-400 font-medium">
-                    <Star className="h-4 w-4 fill-amber-400 mr-1" />
-                    {parseFloat(profile.calificacion_promedio || '0').toFixed(1)}
-                  </span>
+                  {parseFloat(profile.calificacion_promedio || '0') > 0 ? (
+                    <span className="flex items-center text-amber-400 font-medium">
+                      <Star className="h-4 w-4 fill-amber-400 mr-1" />
+                      {parseFloat(profile.calificacion_promedio || '0').toFixed(1)}
+                    </span>
+                  ) : (
+                    <span className="text-xs bg-slate-700/60 text-slate-300 px-2 py-0.5 rounded-full border border-slate-600/50">
+                      Nuevo talento
+                    </span>
+                  )}
                 </div>
               </div>
-              <div className="w-full sm:w-auto flex gap-2 pb-2 shrink-0">
+              {/* Botón Contactar ocultado: El modal funciona como visor informativo y de credenciales auditadas */}
+              {/* <div className="w-full sm:w-auto flex gap-2 pb-2 shrink-0">
                 <button className="flex-1 sm:flex-none btn-primary py-2 px-6 flex items-center justify-center gap-2">
                   <Phone className="h-4 w-4" /> Contactar
                 </button>
-              </div>
+              </div> */}
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

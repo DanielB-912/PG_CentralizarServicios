@@ -1,6 +1,6 @@
 import { useState, useContext, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { Users, BarChart3, Settings, LogOut, Search, Plus, Edit2, Trash2, X, Briefcase, Mail, Lock, Eye, EyeOff, UserCircle, FileText, Check, XCircle, Download } from 'lucide-react';
+import { Users, BarChart3, Settings, LogOut, Search, Plus, Edit2, Trash2, X, Briefcase, Mail, Lock, Eye, EyeOff, UserCircle, FileText, Check, XCircle, Download, Clock, RotateCcw } from 'lucide-react';
 import axios from 'axios';
 import { ProfileModal } from '../components/ProfileModal';
 import { GlobalVoiceAssistant } from '../components/GlobalVoiceAssistant';
@@ -17,9 +17,23 @@ interface Usuario {
   email: string;
   rol: string;
   estado_activo: number;
-  fechaRegistro: string;
+  fecha_registro?: string;
+  fechaRegistro?: string;
   telefono?: string;
   direccion?: string;
+  foto_url?: string;
+  id_prestador?: number;
+  especialidad?: string;
+  descripcion_profesional?: string;
+  disponibilidad_horaria?: string;
+  zona_cobertura?: string;
+  macrodistrito?: string;
+  lat_cobertura?: number;
+  lng_cobertura?: number;
+  radio_cobertura?: number;
+  saldo?: number;
+  total_credenciales?: number;
+  credenciales_aprobadas?: number;
 }
 
 interface Credencial {
@@ -56,13 +70,33 @@ export const DashboardAdmin = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [newAdmin, setNewAdmin] = useState({ nombres: '', apellidos: '', email: '', contrasena: '', rol: 'ADMINISTRADOR' });
 
+  const nameRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+  const isNewAdminNombresValid = newAdmin.nombres.trim().length > 0 && nameRegex.test(newAdmin.nombres);
+  const showNewAdminNombresError = newAdmin.nombres.length > 0 && !nameRegex.test(newAdmin.nombres);
+
+  const isNewAdminApellidosValid = newAdmin.apellidos.trim().length > 0 && nameRegex.test(newAdmin.apellidos);
+  const showNewAdminApellidosError = newAdmin.apellidos.length > 0 && !nameRegex.test(newAdmin.apellidos);
+
+  const isNewAdminEmailValid = emailRegex.test(newAdmin.email.trim());
+  const showNewAdminEmailError = newAdmin.email.length > 0 && !isNewAdminEmailValid;
+
+  const hasNewAdminMinLength = newAdmin.contrasena.length >= 8;
+  const hasNewAdminUpperLower = /[A-Z]/.test(newAdmin.contrasena) && /[a-z]/.test(newAdmin.contrasena);
+  const hasNewAdminNumber = /[0-9]/.test(newAdmin.contrasena);
+  const hasNewAdminSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(newAdmin.contrasena);
+  const isNewAdminPasswordValid = hasNewAdminMinLength && hasNewAdminUpperLower && hasNewAdminNumber && hasNewAdminSpecial && newAdmin.contrasena.trim().length > 0;
+
+  const isNewAdminFormValid = isNewAdminNombresValid && isNewAdminApellidosValid && isNewAdminEmailValid && isNewAdminPasswordValid;
+
   // Estado para Editar Usuario
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingUser, setEditingUser] = useState<Partial<Usuario>>({});
+  const [inspectingUser, setInspectingUser] = useState<Usuario | null>(null);
 
   // Estado para Configuración
   const [comision, setComision] = useState(5);
-  const [maintenanceMode, setMaintenanceMode] = useState(false);
 
   const [reportes, setReportes] = useState<any>({ 
     usuariosTotales: 0, 
@@ -155,30 +189,49 @@ export const DashboardAdmin = () => {
 
   const handleRegisterAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isNewAdminFormValid) return;
+
+    const cleanEmail = newAdmin.email.trim().toLowerCase();
+    const cleanPassword = newAdmin.contrasena;
+    const cleanNombres = newAdmin.nombres.trim();
+    const cleanApellidos = newAdmin.apellidos.trim();
+
     try {
       await axios.post('http://localhost:3001/api/auth/register', {
-        ...newAdmin
+        ...newAdmin,
+        email: cleanEmail,
+        contrasena: cleanPassword,
+        nombres: cleanNombres,
+        apellidos: cleanApellidos
       });
       setShowModal(false);
       setNewAdmin({ nombres: '', apellidos: '', email: '', contrasena: '', rol: 'ADMINISTRADOR' });
       fetchUsers();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error al registrar usuario:', error);
+      alert(error.response?.data?.error || 'Error al registrar usuario');
     }
   };
 
-  const handleDeleteUser = async (id: string | number) => {
-    if (confirm('¿Está seguro de que desea eliminar/desactivar este usuario?')) {
+  const handleToggleUser = async (id: string | number, currentEstado?: number) => {
+    const estadoActual = currentEstado !== undefined ? currentEstado : 1;
+    const accion = estadoActual === 1 ? 'desactivar' : 'reactivar';
+    const nuevoEstado = estadoActual === 1 ? 0 : 1;
+    if (confirm(`¿Está seguro de que desea ${accion} este usuario?`)) {
       try {
-        await axios.delete(`http://localhost:3001/api/users/${id}`, {
+        await axios.patch(`http://localhost:3001/api/users/${id}/estado`, {
+          estado_activo: nuevoEstado
+        }, {
           headers: { Authorization: `Bearer ${token}` }
         });
         fetchUsers();
       } catch (error) {
-        console.error('Error al eliminar usuario:', error);
+        console.error(`Error al ${accion} usuario:`, error);
       }
     }
   };
+
+
 
   const handleEditUser = (userToEdit: Usuario) => {
     setEditingUser(userToEdit);
@@ -517,8 +570,8 @@ export const DashboardAdmin = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-700/50">
                     {filteredUsers.map((u) => (
-                      <tr key={u.id_usuario || u.id} className="hover:bg-slate-800/30 transition-colors group">
-                        <td className="p-4 text-textSecondary text-xs">USR-***{(u.id_usuario || u.id).toString().slice(-3)}</td>
+                      <tr key={u.id_usuario || u.id} className="hover:bg-slate-800/30 transition-colors">
+                        <td className="p-4 text-slate-400 font-mono text-sm font-semibold">#{u.id_usuario || u.id}</td>
                         <td className="p-4 text-white font-medium">{u.nombres} {u.apellidos}</td>
                         <td className="p-4 text-textSecondary">{u.email}</td>
                         <td className="p-4">
@@ -531,18 +584,37 @@ export const DashboardAdmin = () => {
                           </span>
                         </td>
                         <td className="p-4">
-                          <span className={`flex items-center gap-1.5 text-sm ${u.estado_activo ? 'text-emerald-400' : 'text-red-400'}`}>
-                            <span className={`h-2 w-2 rounded-full ${u.estado_activo ? 'bg-emerald-400' : 'bg-red-400'}`}></span>
-                            {u.estado_activo ? 'Activo' : 'Inactivo'}
+                          <span className={`flex items-center gap-1.5 text-sm ${Number(u.estado_activo) === 1 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            <span className={`h-2 w-2 rounded-full ${Number(u.estado_activo) === 1 ? 'bg-emerald-400' : 'bg-red-400'}`}></span>
+                            {Number(u.estado_activo) === 1 ? 'Activo' : 'Inactivo'}
                           </span>
                         </td>
                         <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => handleEditUser(u)} className="text-textSecondary hover:text-primary transition-colors">
+                          <div className="flex items-center justify-end gap-2">
+                            <button 
+                              onClick={() => setInspectingUser(u)} 
+                              className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition-colors"
+                              title="Inspeccionar perfil y antecedentes"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                            <button 
+                              onClick={() => handleEditUser(u)} 
+                              className="p-1.5 text-slate-400 hover:text-primary hover:bg-slate-800 rounded-lg transition-colors" 
+                              title="Editar usuario"
+                            >
                               <Edit2 className="h-4 w-4" />
                             </button>
-                            <button onClick={() => handleDeleteUser(u.id_usuario || u.id)} className="text-textSecondary hover:text-red-400 transition-colors">
-                              <Trash2 className="h-4 w-4" />
+                            <button 
+                              onClick={() => handleToggleUser(u.id_usuario || u.id, Number(u.estado_activo))} 
+                              className={`p-1.5 rounded-lg transition-colors ${
+                                Number(u.estado_activo) === 1 
+                                  ? 'text-slate-400 hover:text-red-400 hover:bg-red-500/10' 
+                                  : 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10'
+                              }`} 
+                              title={Number(u.estado_activo) === 1 ? "Desactivar usuario" : "Reactivar usuario"}
+                            >
+                              {Number(u.estado_activo) === 1 ? <Trash2 className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
                             </button>
                           </div>
                         </td>
@@ -651,26 +723,49 @@ export const DashboardAdmin = () => {
                 <hr className="border-slate-700" />
 
                 {/* Toggles */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-white font-medium block">Modo Mantenimiento</span>
-                    <span className="text-sm text-textSecondary">Deshabilita el acceso a usuarios regulares temporalmente.</span>
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/40 border border-slate-800">
+                  <div className="flex-1 pr-4">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-white font-medium">Modo Mantenimiento</span>
+                      <span className="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded-full font-medium">
+                        Próximamente (Fase 2)
+                      </span>
+                    </div>
+                    <span className="text-xs text-textSecondary block">Deshabilita el acceso a usuarios regulares temporalmente.</span>
+                    <span className="text-[11px] text-amber-400/80 italic mt-0.5 block">
+                      Parámetro reservado para futuras implementaciones
+                    </span>
                   </div>
                   <button 
-                    onClick={() => setMaintenanceMode(!maintenanceMode)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${maintenanceMode ? 'bg-primary' : 'bg-slate-600'}`}
+                    type="button"
+                    disabled
+                    title="Parámetro reservado para futuras implementaciones"
+                    className="relative inline-flex h-6 w-11 items-center rounded-full bg-slate-700/60 opacity-60 cursor-not-allowed transition-colors shrink-0"
                   >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${maintenanceMode ? 'translate-x-6' : 'translate-x-1'}`} />
+                    <span className="inline-block h-4 w-4 transform rounded-full bg-slate-400 translate-x-1 transition-transform" />
                   </button>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-white font-medium block">Registro Automático de Técnicos</span>
-                    <span className="text-sm text-textSecondary">Aprobar automáticamente cuentas de técnicos nuevos.</span>
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/40 border border-slate-800">
+                  <div className="flex-1 pr-4">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-white font-medium">Registro Automático de Técnicos</span>
+                      <span className="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded-full font-medium">
+                        Próximamente (Fase 2)
+                      </span>
+                    </div>
+                    <span className="text-xs text-textSecondary block">Aprobar automáticamente cuentas de técnicos nuevos.</span>
+                    <span className="text-[11px] text-amber-400/80 italic mt-0.5 block">
+                      Parámetro reservado para futuras implementaciones
+                    </span>
                   </div>
-                  <button className="relative inline-flex h-6 w-11 items-center rounded-full bg-slate-600 transition-colors">
-                    <span className="inline-block h-4 w-4 transform rounded-full bg-white translate-x-1 transition-transform" />
+                  <button 
+                    type="button"
+                    disabled
+                    title="Parámetro reservado para futuras implementaciones"
+                    className="relative inline-flex h-6 w-11 items-center rounded-full bg-slate-700/60 opacity-60 cursor-not-allowed transition-colors shrink-0"
+                  >
+                    <span className="inline-block h-4 w-4 transform rounded-full bg-slate-400 translate-x-1 transition-transform" />
                   </button>
                 </div>
                 
@@ -808,15 +903,33 @@ export const DashboardAdmin = () => {
             
             <h2 className="text-2xl font-bold text-white mb-6">Nuevo Usuario</h2>
             
-            <form onSubmit={handleRegisterAdmin} className="space-y-4">
+            <form onSubmit={handleRegisterAdmin} noValidate className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm text-textSecondary mb-1">Nombres</label>
-                  <input required type="text" className="input-field" value={newAdmin.nombres} onChange={e => setNewAdmin({...newAdmin, nombres: e.target.value})} />
+                  <input 
+                    type="text" 
+                    className={`input-field ${showNewAdminNombresError ? 'border-red-500 focus:border-red-500' : ''}`}
+                    value={newAdmin.nombres} 
+                    onChange={e => setNewAdmin({...newAdmin, nombres: e.target.value})} 
+                    placeholder="Juan"
+                  />
+                  {showNewAdminNombresError && (
+                    <p className="text-red-400 text-xs mt-1">Los nombres solo deben contener letras</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm text-textSecondary mb-1">Apellidos</label>
-                  <input required type="text" className="input-field" value={newAdmin.apellidos} onChange={e => setNewAdmin({...newAdmin, apellidos: e.target.value})} />
+                  <input 
+                    type="text" 
+                    className={`input-field ${showNewAdminApellidosError ? 'border-red-500 focus:border-red-500' : ''}`}
+                    value={newAdmin.apellidos} 
+                    onChange={e => setNewAdmin({...newAdmin, apellidos: e.target.value})} 
+                    placeholder="Pérez"
+                  />
+                  {showNewAdminApellidosError && (
+                    <p className="text-red-400 text-xs mt-1">Los apellidos solo deben contener letras</p>
+                  )}
                 </div>
               </div>
               
@@ -824,18 +937,55 @@ export const DashboardAdmin = () => {
                 <label className="block text-sm text-textSecondary mb-1">Correo Electrónico</label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3 h-5 w-5 text-textSecondary" />
-                  <input required type="email" className="input-field pl-10" value={newAdmin.email} onChange={e => setNewAdmin({...newAdmin, email: e.target.value})} />
+                  <input 
+                    type="email" 
+                    className={`input-field pl-10 ${showNewAdminEmailError ? 'border-red-500 focus:border-red-500' : ''}`}
+                    value={newAdmin.email} 
+                    onChange={e => setNewAdmin({...newAdmin, email: e.target.value})} 
+                    placeholder="usuario@dominio.com"
+                  />
                 </div>
+                {showNewAdminEmailError && (
+                  <p className="text-red-400 text-xs mt-1">
+                    Ingrese un formato de correo electrónico válido (ej. usuario@dominio.com)
+                  </p>
+                )}
               </div>
 
               <div>
                 <label className="block text-sm text-textSecondary mb-1">Contraseña Provisoria</label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 h-5 w-5 text-textSecondary" />
-                  <input required type={showPassword ? "text" : "password"} className="input-field pl-10 pr-10" value={newAdmin.contrasena} onChange={e => setNewAdmin({...newAdmin, contrasena: e.target.value})} />
+                  <input 
+                    type={showPassword ? "text" : "password"} 
+                    className="input-field pl-10 pr-10" 
+                    value={newAdmin.contrasena} 
+                    onChange={e => setNewAdmin({...newAdmin, contrasena: e.target.value})} 
+                    placeholder="••••••••"
+                  />
                   <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3 text-textSecondary hover:text-white transition-colors">
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
+                </div>
+
+                {/* Checklist Dinámico */}
+                <div className="mt-2.5 bg-slate-900/60 border border-slate-800 rounded-xl p-3 space-y-1.5 text-xs">
+                  <div className={`flex items-center gap-2 transition-colors ${hasNewAdminMinLength ? 'text-emerald-400 font-medium' : 'text-slate-400'}`}>
+                    <Check className={`w-3.5 h-3.5 transition-colors ${hasNewAdminMinLength ? 'text-emerald-400' : 'text-slate-600'}`} />
+                    <span>Mínimo 8 caracteres</span>
+                  </div>
+                  <div className={`flex items-center gap-2 transition-colors ${hasNewAdminUpperLower ? 'text-emerald-400 font-medium' : 'text-slate-400'}`}>
+                    <Check className={`w-3.5 h-3.5 transition-colors ${hasNewAdminUpperLower ? 'text-emerald-400' : 'text-slate-600'}`} />
+                    <span>Al menos una mayúscula y una minúscula</span>
+                  </div>
+                  <div className={`flex items-center gap-2 transition-colors ${hasNewAdminNumber ? 'text-emerald-400 font-medium' : 'text-slate-400'}`}>
+                    <Check className={`w-3.5 h-3.5 transition-colors ${hasNewAdminNumber ? 'text-emerald-400' : 'text-slate-600'}`} />
+                    <span>Al menos un número</span>
+                  </div>
+                  <div className={`flex items-center gap-2 transition-colors ${hasNewAdminSpecial ? 'text-emerald-400 font-medium' : 'text-slate-400'}`}>
+                    <Check className={`w-3.5 h-3.5 transition-colors ${hasNewAdminSpecial ? 'text-emerald-400' : 'text-slate-600'}`} />
+                    <span>Al menos un carácter especial (!@#$%^&*...)</span>
+                  </div>
                 </div>
               </div>
 
@@ -855,7 +1005,15 @@ export const DashboardAdmin = () => {
                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-3 px-4 rounded-xl font-medium text-textSecondary hover:bg-slate-800 transition-colors">
                   Cancelar
                 </button>
-                <button type="submit" className="flex-1 btn-primary">
+                <button 
+                  type="submit" 
+                  disabled={!isNewAdminFormValid}
+                  className={`flex-1 py-3 px-4 rounded-xl font-medium transition-all ${
+                    isNewAdminFormValid 
+                      ? 'btn-primary cursor-pointer' 
+                      : 'bg-slate-700/50 text-slate-500 cursor-not-allowed border border-slate-700'
+                  }`}
+                >
                   Crear Cuenta
                 </button>
               </div>
@@ -943,6 +1101,202 @@ export const DashboardAdmin = () => {
                   className="max-w-full max-h-full rounded-xl object-contain shadow-lg"
                 />
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Inspección de Usuario (Auditoría Administrativa) */}
+      {inspectingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-surface border border-slate-700 rounded-3xl p-6 sm:p-8 w-full max-w-2xl shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar animate-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setInspectingUser(null)} 
+              className="absolute top-5 right-5 text-textSecondary hover:text-white transition-colors bg-slate-800 p-2 rounded-xl border border-slate-700"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            
+            <div className="flex items-start gap-4 mb-6">
+              <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-bold text-2xl shadow-lg shrink-0 overflow-hidden border border-indigo-500/40">
+                {inspectingUser.foto_url ? (
+                  <img src={inspectingUser.foto_url} alt="Avatar" className="w-full h-full object-cover" />
+                ) : (
+                  inspectingUser.nombres?.charAt(0) || 'U'
+                )}
+              </div>
+              <div className="flex-1 min-w-0 pr-8">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  <h2 className="text-2xl font-bold text-white truncate">{inspectingUser.nombres} {inspectingUser.apellidos}</h2>
+                  <span className={`px-2.5 py-0.5 text-xs rounded-full font-medium ${
+                    inspectingUser.rol === 'ADMINISTRADOR' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' :
+                    inspectingUser.rol === 'PRESTADOR_TECNICO' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' :
+                    'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                  }`}>
+                    {inspectingUser.rol}
+                  </span>
+                  <span className={`flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full font-medium ${Number(inspectingUser.estado_activo) === 1 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${Number(inspectingUser.estado_activo) === 1 ? 'bg-emerald-400' : 'bg-red-400'}`}></span>
+                    {Number(inspectingUser.estado_activo) === 1 ? 'Activo' : 'Inactivo'}
+                  </span>
+                </div>
+                <p className="text-sm text-textSecondary truncate">{inspectingUser.email}</p>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              {/* Información Personal y Contacto */}
+              <div className="bg-slate-900/60 rounded-2xl p-5 border border-slate-800">
+                <h3 className="text-xs font-bold text-textSecondary uppercase tracking-wider mb-4">Datos de Cuenta y Contacto</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-textSecondary text-xs block mb-0.5">Correo Electrónico</span>
+                    <span className="text-white font-medium break-all">{inspectingUser.email}</span>
+                  </div>
+                  <div>
+                    <span className="text-textSecondary text-xs block mb-0.5">Teléfono de Contacto</span>
+                    <span className="text-white font-medium">{inspectingUser.telefono || 'No registrado'}</span>
+                  </div>
+                  <div>
+                    <span className="text-textSecondary text-xs block mb-0.5">Dirección Domiciliaria</span>
+                    <span className="text-white font-medium">{inspectingUser.direccion || 'No especificada'}</span>
+                  </div>
+                  <div>
+                    <span className="text-textSecondary text-xs block mb-0.5">Fecha de Registro</span>
+                    <span className="text-white font-medium">
+                      {inspectingUser.fecha_registro 
+                        ? new Date(inspectingUser.fecha_registro).toLocaleDateString('es-BO', { day: '2-digit', month: 'short', year: 'numeric' })
+                        : 'Reciente'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Si es PRESTADOR_TECNICO: Antecedentes, Credenciales y Cobertura */}
+              {inspectingUser.rol === 'PRESTADOR_TECNICO' && (
+                <div className="bg-slate-900/60 rounded-2xl p-5 border border-amber-500/30">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider">Perfil Profesional y Credenciales</h3>
+                    <span className="text-xs bg-amber-500/20 text-amber-300 px-2.5 py-0.5 rounded-full font-medium">
+                      {inspectingUser.especialidad || 'Especialista'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mb-4">
+                    <div>
+                      <span className="text-textSecondary text-xs block mb-0.5">Macrodistrito Base</span>
+                      <span className="text-white font-medium">{inspectingUser.macrodistrito || 'Cochabamba Centro'}</span>
+                    </div>
+                    <div>
+                      <span className="text-textSecondary text-xs block mb-0.5">Zona de Cobertura</span>
+                      <span className="text-white font-medium">
+                        {inspectingUser.radio_cobertura 
+                          ? `${inspectingUser.radio_cobertura} km a la redonda (${inspectingUser.zona_cobertura || inspectingUser.macrodistrito})`
+                          : inspectingUser.zona_cobertura?.trim() 
+                            ? inspectingUser.zona_cobertura 
+                            : 'Atención en todo su macrodistrito base'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-textSecondary text-xs block mb-0.5">Disponibilidad Horaria</span>
+                      <span className="text-white font-medium">{inspectingUser.disponibilidad_horaria || 'A convenir'}</span>
+                    </div>
+                    <div>
+                      <span className="text-textSecondary text-xs block mb-0.5">Saldo en Monedero</span>
+                      {parseFloat(inspectingUser.saldo?.toString() || '0') < 0 ? (
+                        <div>
+                          <span className="text-red-400 font-bold block text-base">Bs. {parseFloat(inspectingUser.saldo?.toString() || '0').toFixed(2)}</span>
+                          <span className="text-xs text-red-400 font-medium flex items-center gap-1 mt-0.5">
+                            ⚠️ Saldo deudor (Pendiente de regularización)
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-emerald-400 font-bold text-base">Bs. {parseFloat(inspectingUser.saldo?.toString() || '0').toFixed(2)}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-800 pt-3">
+                    <span className="text-textSecondary text-xs block mb-1">Descripción / Biografía</span>
+                    <p className="text-white/90 text-sm italic bg-slate-800/40 p-3 rounded-xl border border-slate-700/50">
+                      "{inspectingUser.descripcion_profesional || 'Sin descripción registrada aún.'}"
+                    </p>
+                  </div>
+
+                  <div className="border-t border-slate-800 pt-4 mt-4 flex items-center justify-between">
+                    <div>
+                      <span className="text-textSecondary text-xs block">Auditoría de Documentos / CI</span>
+                      <span className="text-white font-medium text-sm">
+                        {inspectingUser.credenciales_aprobadas || 0} aprobadas de {inspectingUser.total_credenciales || 0} registradas
+                      </span>
+                    </div>
+                    {(inspectingUser.credenciales_aprobadas || 0) > 0 ? (
+                      <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs rounded-full font-medium flex items-center gap-1.5">
+                        <Check className="h-3.5 w-3.5" /> Antecedentes Verificados
+                      </span>
+                    ) : (
+                      <span className="px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs rounded-full font-medium flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5" /> Pendiente de Acreditación
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Botones de Acción para Administrador */}
+              <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                <button 
+                  onClick={() => setInspectingUser(null)} 
+                  className="flex-1 py-3 px-4 rounded-xl font-medium text-textSecondary hover:bg-slate-800 transition-colors border border-slate-700"
+                >
+                  Cerrar
+                </button>
+                <button 
+                  onClick={() => {
+                    const target = inspectingUser;
+                    setInspectingUser(null);
+                    handleEditUser(target);
+                  }} 
+                  className="flex-1 py-3 px-4 rounded-xl font-medium btn-primary flex items-center justify-center gap-2"
+                >
+                  <Edit2 className="h-4 w-4" /> Editar Usuario
+                </button>
+                <button 
+                  onClick={async () => {
+                    const idToToggle = inspectingUser.id_usuario || inspectingUser.id;
+                    const currentEstado = Number(inspectingUser.estado_activo);
+                    const nuevoEstado = currentEstado === 1 ? 0 : 1;
+                    const accion = currentEstado === 1 ? 'desactivar' : 'reactivar';
+                    if (confirm(`¿Está seguro de que desea ${accion} este usuario?`)) {
+                      try {
+                        await axios.patch(`http://localhost:3001/api/users/${idToToggle}/estado`, {
+                          estado_activo: nuevoEstado
+                        }, {
+                          headers: { Authorization: `Bearer ${token}` }
+                        });
+                        setInspectingUser(prev => prev ? ({ ...prev, estado_activo: nuevoEstado }) : null);
+                        fetchUsers();
+                      } catch (error) {
+                        console.error(`Error al ${accion} usuario:`, error);
+                      }
+                    }
+                  }} 
+                  className={`py-3 px-4 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 border ${
+                    Number(inspectingUser.estado_activo) === 1 
+                      ? 'bg-red-500/20 hover:bg-red-500/30 text-red-300 border-red-500/40' 
+                      : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40'
+                  }`}
+                >
+                  {Number(inspectingUser.estado_activo) === 1 ? (
+                    <>
+                      <Trash2 className="h-4 w-4" /> Desactivar Usuario
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4" /> Reactivar Usuario
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

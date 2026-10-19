@@ -8,13 +8,15 @@ dotenv.config();
 
 export class AuthService {
   static async login(email: string, contrasena: string) {
-    const user = await UserModel.findByEmail(email);
+    const cleanEmail = email ? email.toString().trim().toLowerCase() : '';
+    const cleanPass = contrasena ? contrasena.toString().trim() : '';
+    const user = await UserModel.findByEmail(cleanEmail);
     
     if (!user) {
       throw new Error('Credenciales inválidas');
     }
 
-    const isMatch = await bcrypt.compare(contrasena, user.password_hash);
+    const isMatch = await bcrypt.compare(cleanPass, user.password_hash);
     if (!isMatch) {
       throw new Error('Credenciales inválidas');
     }
@@ -37,28 +39,32 @@ export class AuthService {
   }
 
   static async register(datos: any) {
-    const { nombres, apellidos, email, contrasena, rol, telefono, direccion } = datos;
+    const cleanEmail = datos.email ? datos.email.toString().trim().toLowerCase() : '';
+    const cleanPass = datos.contrasena ? datos.contrasena.toString().trim() : '';
+    const cleanNombres = datos.nombres ? datos.nombres.toString().trim() : '';
+    const cleanApellidos = datos.apellidos ? datos.apellidos.toString().trim() : '';
+    const { rol, telefono, direccion } = datos;
 
-    const existingUser = await UserModel.findByEmail(email);
+    const existingUser = await UserModel.findByEmail(cleanEmail);
     if (existingUser) {
       throw new Error('El correo electrónico ya se encuentra registrado en la plataforma.');
     }
 
     const passRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-    if (!passRegex.test(contrasena)) {
+    if (!passRegex.test(cleanPass)) {
       throw new Error('La contraseña debe tener al menos 8 caracteres, incluir mayúsculas, minúsculas, números y caracteres especiales.');
     }
 
-    const password_hash = await bcrypt.hash(contrasena, 10);
+    const password_hash = await bcrypt.hash(cleanPass, 10);
 
     const newUser = {
-      nombres,
-      apellidos,
-      email,
+      nombres: cleanNombres,
+      apellidos: cleanApellidos,
+      email: cleanEmail,
       password_hash,
       rol,
-      telefono: telefono || '',
-      direccion: direccion || ''
+      telefono: (telefono || '').toString().trim(),
+      direccion: (direccion || '').toString().trim()
     };
 
     let id_usuario: number;
