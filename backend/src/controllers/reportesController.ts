@@ -53,7 +53,7 @@ export class ReportesController {
 
       // 5. Historial de transacciones (Últimas 100 con la columna real)
       const [txRows]: any = await pool.query(`
-        SELECT s.id_solicitud AS id, s.${fechaCol} AS fecha, u.nombres AS prestador, o.${montoCol} AS monto
+        SELECT s.id_solicitud AS id, s.${fechaCol} AS fecha, CONCAT(u.nombres, ' ', u.apellidos) AS prestador, pr.especialidad AS prestador_especialidad, o.${montoCol} AS monto
         FROM ofertas o
         JOIN solicitudes s ON o.id_solicitud = s.id_solicitud
         JOIN prestadores pr ON o.id_prestador = pr.id_prestador
@@ -62,13 +62,25 @@ export class ReportesController {
         ORDER BY s.${fechaCol} DESC LIMIT 100
       `);
 
+      // 6. Ingresos diarios para el gráfico
+      const [diariosRows]: any = await pool.query(`
+        SELECT DATE(s.${fechaCol}) AS fecha, SUM(o.${montoCol} * 0.08) AS total_comision, COUNT(*) AS total_vinculaciones
+        FROM ofertas o
+        JOIN solicitudes s ON o.id_solicitud = s.id_solicitud
+        WHERE o.estado_oferta = 'ACEPTADA'
+        GROUP BY DATE(s.${fechaCol})
+        ORDER BY fecha DESC
+        LIMIT 10
+      `);
+
       const payload = {
         usuariosTotales: totalUsuarios,
         serviciosVinculados: totalVinculaciones,
         ingresosTotales: totalIngresos,
         tasaComision: 8,
         macrodistritos: macroRows.length > 0 ? macroRows : [{ macrodistrito: 'Cercado', cantidad: totalVinculaciones || 1 }],
-        transacciones: txRows
+        transacciones: txRows,
+        ingresosDiarios: diariosRows
       };
 
       console.log(">>> [AUDITORIA DB] Payload generado con éxito:", payload);

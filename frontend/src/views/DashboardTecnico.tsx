@@ -66,6 +66,117 @@ const isEspecialidadMatch = (solicitudTipo: string | undefined, tecnicoEspeciali
     if (matchSol && matchTec) return true;
   }
   return false;
+  return false;
+};
+
+export interface GeoData {
+  municipio: string;
+  zona: string;
+  calle: string;
+}
+
+const getDisplayLocation = (g: GeoData | null) => {
+  if (!g) return 'Cargando...';
+  if (g.calle && g.zona) return `${g.calle}, ${g.zona}`;
+  if (g.calle) return `${g.calle}, ${g.municipio}`;
+  return `${g.zona ? g.zona + ', ' : ''}${g.municipio}`;
+}
+
+const getCleanRef = (refText: string) => {
+  if (!refText) return '';
+  const r = refText.trim();
+  if (r === 'Centro Ciudad' || r === 'Centro ciudad' || r === 'Inmediaciones de campus universitario') return '';
+  return r;
+}
+
+const geocodeCache: Record<string, GeoData> = {};
+const getAddress = async (lat: number, lng: number): Promise<GeoData> => {
+  const key = `${lat},${lng}`;
+  if (geocodeCache[key]) return geocodeCache[key];
+  const fallback = { municipio: 'Cochabamba', zona: '', calle: '' };
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+    const data = await res.json();
+    const address = data.address;
+    if (address) {
+       const calle = address.road || address.pedestrian || address.street || address.footway || '';
+       const zona = address.suburb || address.neighbourhood || address.residential || '';
+       const municipio = address.city || address.town || address.village || address.municipality || 'Cochabamba';
+       const result = { municipio, zona, calle };
+       geocodeCache[key] = result;
+       return result;
+    }
+    return fallback;
+  } catch (e) {
+    return fallback;
+  }
+};
+
+const GeoPopupContent = ({ sol, isSelected }: { sol: any, isSelected: boolean }) => {
+  const [geoData, setGeoData] = useState<GeoData | null>(null);
+  useEffect(() => {
+    if (isSelected) {
+      getAddress(sol.ubicacion_lat, sol.ubicacion_lng).then(setGeoData);
+    }
+  }, [sol, isSelected]);
+  
+  const ref = getCleanRef(sol.direccion_referencia || sol.direccion || sol.macrodistrito);
+  
+  return (
+    <>
+      <strong className="text-sm text-slate-800">Profesional Requerido: {sol.tipo_servicio}</strong><br/>
+      <span className="text-xs text-slate-600">Cliente: {sol.cliente_nombres} {sol.cliente_apellidos}</span><br/>
+      {isSelected ? (
+        <>
+           <span className="text-xs text-slate-500">📍 Ubicación: {getDisplayLocation(geoData)}</span><br/>
+           {ref && <><span className="text-xs text-slate-500">🏠 Ref: {ref}</span><br/></>}
+        </>
+      ) : (
+        <>
+           <span className="text-xs text-slate-500">📍 Zona: {sol.macrodistrito}</span><br/>
+        </>
+      )}
+      <span className="text-xs text-slate-400">(Lat: {sol.ubicacion_lat}, Lng: {sol.ubicacion_lng})</span><br/>
+      {sol.presupuesto && (
+         <strong className="text-emerald-700 mt-1 block">Presupuesto Sugerido: Bs. {sol.presupuesto}</strong>
+      )}
+    </>
+  );
+};
+
+const GeoTargetPopup = ({ targetMarker }: { targetMarker: any }) => {
+  const [geoData, setGeoData] = useState<GeoData | null>(null);
+  useEffect(() => {
+    getAddress(targetMarker.latitud, targetMarker.longitud).then(setGeoData);
+  }, [targetMarker]);
+  
+  const ref = getCleanRef(targetMarker.direccion);
+  const locStr = geoData ? (geoData.calle || geoData.zona ? `${geoData.calle || geoData.zona}, ${geoData.municipio}` : geoData.municipio) : 'Cargando...';
+
+  return (
+    <>
+      <strong className="text-emerald-700">📍 Trabajo Aceptado</strong><br/>
+      {ref && <span>🏠 Ref: {ref}<br/></span>}
+      <span className="text-xs text-slate-600">📍 Ubicación: {locStr}</span><br/>
+      <span className="text-xs text-slate-400">(Lat: {targetMarker.latitud}, Lng: {targetMarker.longitud})</span>
+    </>
+  );
+};
+
+const GeoQuoteAddress = ({ lat, lng, fallback }: { lat: number, lng: number, fallback: string }) => {
+  const [geoData, setGeoData] = useState<GeoData | null>(null);
+  useEffect(() => {
+    if (lat && lng) getAddress(lat, lng).then(setGeoData);
+  }, [lat, lng]);
+  
+  const ref = getCleanRef(fallback);
+
+  return (
+    <>
+      <p>📍 Ubicación: {getDisplayLocation(geoData)}</p>
+      {ref && <p>🏠 Referencia: {ref}</p>}
+    </>
+  );
 };
 
 export const DashboardTecnico = () => {
@@ -619,7 +730,7 @@ export const DashboardTecnico = () => {
                   </button>
                 </div>
 
-                {activeTab === 'feed' ? (
+                {activeTab === 'feed' && (
                   <>
                     <div className="glass-panel rounded-2xl p-6 h-[400px] flex flex-col relative overflow-hidden">
                 <div className="absolute inset-0 z-0">
@@ -639,8 +750,7 @@ export const DashboardTecnico = () => {
                         icon={greenIcon}
                       >
                         <Popup>
-                          <strong className="text-emerald-700">📍 Trabajo Aceptado</strong><br/>
-                          {targetMarker.direccion}
+                          <GeoTargetPopup targetMarker={targetMarker} />
                         </Popup>
                       </Marker>
                     )}
@@ -657,10 +767,7 @@ export const DashboardTecnico = () => {
                           }}
                         >
                           <Popup>
-                            <strong className="text-sm text-slate-800">Profesional Requerido: {sol.tipo_servicio}</strong><br/>
-                            <span className="text-xs text-slate-600">Cliente: {sol.cliente_nombres} {sol.cliente_apellidos}</span><br/>
-                            <span className="text-xs text-slate-500">{sol.macrodistrito}</span><br/>
-                            {sol.presupuesto && <span className="text-xs font-bold text-emerald-600">Presupuesto: Bs. {sol.presupuesto}</span>}<br/>
+                            <GeoPopupContent sol={sol} isSelected={solicitudSeleccionada === sol.id_solicitud} />
                             <button 
                               onClick={() => setSolicitudSeleccionada(sol.id_solicitud)}
                               className="mt-2 w-full bg-primary hover:bg-primary/90 text-white rounded py-1 text-xs font-medium"
@@ -760,7 +867,9 @@ export const DashboardTecnico = () => {
                 </div>
               </div>
               </>
-            ) : (
+            )}
+
+            {activeTab === 'cotizaciones' && (
               <div className="glass-panel rounded-2xl p-6 flex flex-col">
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-xl font-semibold text-white">Mis Cotizaciones Activas</h2>
@@ -780,9 +889,6 @@ export const DashboardTecnico = () => {
                       <div key={cotizacion.id_oferta} className="bg-surface p-4 rounded-xl border border-slate-700 flex flex-col md:flex-row justify-between gap-4 hover:border-primary/50 transition-colors">
                         <div>
                           <div className="flex items-center gap-2 mb-2">
-                            <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700">
-                              Solicitud #{cotizacion.id_solicitud}
-                            </span>
                             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                               cotizacion.estado_oferta === 'ACEPTADA' ? 'bg-emerald-500/20 text-emerald-400' :
                               cotizacion.estado_oferta === 'RECHAZADA' ? 'bg-red-500/20 text-red-400' :
@@ -798,9 +904,10 @@ export const DashboardTecnico = () => {
                                 <CheckCircle className="h-5 w-5" /> Vinculación Confirmada
                               </div>
                               <div className="text-sm text-emerald-100/80 space-y-1 ml-7">
+                                <p>🔧 Trabajo / Problema: {cotizacion.descripcion || 'Servicio Solicitado'}</p>
+                                <GeoQuoteAddress lat={cotizacion.latitud} lng={cotizacion.longitud} fallback={cotizacion.direccion || 'No especificada'} />
                                 <p>👤 Cliente: {cotizacion.cliente_nombres} {cotizacion.cliente_apellidos}</p>
                                 <p>📞 Teléfono: +591 {cotizacion.cliente_telefono}</p>
-                                <p>📍 Dirección: {cotizacion.direccion}</p>
                               </div>
                               {cotizacion.latitud && cotizacion.longitud && (
                                 <button 

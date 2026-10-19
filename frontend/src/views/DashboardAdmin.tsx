@@ -207,32 +207,121 @@ export const DashboardAdmin = () => {
   const handleExportPDF = () => {
     const doc = new jsPDF();
     
-    doc.setFontSize(20);
-    doc.text('Reporte de Sostenibilidad Financiera', 14, 22);
+    // Header Banner
+    doc.setFillColor(30, 41, 59); // slate-800
+    doc.rect(0, 0, 210, 40, 'F');
     
-    doc.setFontSize(12);
-    const m = reportes.metricas;
-    doc.text(`Total Usuarios: ${m.totalUsuarios || 0}`, 14, 32);
-    doc.text(`Total Vinculaciones: ${m.totalVinculaciones || 0}`, 14, 40);
-    doc.text(`Ingresos Totales (Comisiones): Bs. ${m.totalRecaudado || 0}`, 14, 48);
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text('SISTEMA DE GESTIÓN Y CENTRALIZACIÓN', 105, 15, { align: 'center' });
+    doc.text('DE SERVICIOS COCHABAMBA', 105, 22, { align: 'center' });
+    
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(200, 200, 200);
+    doc.text('Reporte de Rendimiento y Sostenibilidad Financiera', 105, 30, { align: 'center' });
+    doc.setFontSize(9);
+    doc.text(`Emisión: ${new Date().toLocaleString('es-BO', { timeZone: 'America/La_Paz' })}`, 105, 36, { align: 'center' });
 
+    // Reset styles
+    doc.setTextColor(0, 0, 0);
+
+    // KPI Cards (4 columns)
+    const m = reportes;
+    const ticketPromedio = m.serviciosVinculados > 0 ? (m.ingresosTotales / m.serviciosVinculados).toFixed(2) : '0.00';
+    
+    const kpis = [
+      { title: 'Usuarios', value: m.usuariosTotales || '0' },
+      { title: 'Concretados', value: m.serviciosVinculados || '0' },
+      { title: 'Total Bs.', value: m.ingresosTotales || '0' },
+      { title: 'Com. Prom', value: `Bs. ${ticketPromedio}` }
+    ];
+
+    let startX = 14;
+    kpis.forEach(kpi => {
+      doc.setDrawColor(200, 200, 200);
+      doc.setFillColor(248, 250, 252);
+      doc.roundedRect(startX, 45, 42, 20, 2, 2, 'FD');
+      
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 116, 139);
+      doc.text(kpi.title, startX + 21, 52, { align: 'center' });
+      
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(15, 23, 42);
+      doc.text(kpi.value.toString(), startX + 21, 60, { align: 'center' });
+      
+      startX += 46;
+    });
+
+    doc.setTextColor(15, 23, 42);
     doc.setFontSize(14);
-    doc.text('Historial de Transacciones (Comisiones)', 14, 60);
+    doc.text('Demanda por Macrodistrito', 14, 76);
 
-    const tableData = (reportes.transacciones || []).map((t: any) => [
-      t.id,
-      new Date(t.fecha).toLocaleDateString(),
-      `${t.prestador}`,
-      `Bs. ${t.monto}`
+    const macroData = (reportes.macrodistritos || []).map((mac: any) => {
+      const total = reportes.macrodistritos.reduce((acc: number, x: any) => acc + parseInt(x.cantidad), 0);
+      const widthPercent = total > 0 ? (parseInt(mac.cantidad) / total) * 100 : 0;
+      return [mac.macrodistrito, mac.cantidad, `${widthPercent.toFixed(1)}%`];
+    });
+
+    autoTable(doc, {
+      startY: 81,
+      head: [['Macrodistrito', 'Cantidad de Solicitudes', 'Porcentaje']],
+      body: macroData,
+      theme: 'grid',
+      headStyles: { fillColor: [30, 41, 59] }
+    });
+
+    const finalY = (doc as any).lastAutoTable.finalY || 100;
+    doc.text('Historial de Transacciones (Comisiones)', 14, finalY + 12);
+
+    let sumaComisiones = 0;
+    const tableData = (reportes.transacciones || []).map((t: any, idx: number) => {
+      const comision = parseFloat(t.monto) * 0.08;
+      sumaComisiones += comision;
+      return [
+        (idx + 1).toString(),
+        new Date(t.fecha).toLocaleString('es-BO', { timeZone: 'America/La_Paz' }),
+        `${t.prestador}`,
+        `${t.prestador_especialidad || 'Especialista'}`,
+        `Bs. ${t.monto}`,
+        `Bs. ${comision.toFixed(2)}`
+      ];
+    });
+
+    tableData.push([
+      '', '', '', '', 'TOTAL COMISIONES', `Bs. ${sumaComisiones.toFixed(2)}`
     ]);
 
     autoTable(doc, {
-      startY: 65,
-      head: [['ID', 'Fecha', 'Prestador', 'Monto']],
+      startY: finalY + 17,
+      head: [['#', 'Fecha y Hora', 'Prestador', 'Especialidad', 'Monto Servicio', 'Comisión (8%)']],
       body: tableData,
       theme: 'grid',
-      headStyles: { fillColor: [79, 70, 229] }
+      headStyles: { fillColor: [30, 41, 59] },
+      didParseCell: function (data: any) {
+        if (data.row.index === tableData.length - 1) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [241, 245, 249];
+        }
+      }
     });
+
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.text(
+        `Documento oficial generado por la Plataforma Centralizada de Servicios Cochabamba - Validez Administrativa Interna - Página ${i} de ${pageCount}`,
+        105,
+        290,
+        { align: 'center' }
+      );
+    }
 
     doc.save('reporte_sostenibilidad.pdf');
   };
@@ -260,26 +349,31 @@ export const DashboardAdmin = () => {
               </button>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div className="glass-panel p-6 rounded-xl border border-primary/20 hover:border-primary/50 transition-colors">
                 <h3 className="text-textSecondary text-sm font-medium">Usuarios Totales</h3>
                 <p className="text-3xl font-bold text-white mt-2">{reportes.usuariosTotales || 0}</p>
                 <p className="text-xs text-emerald-400 mt-2">Clientes y Técnicos</p>
               </div>
               <div className="glass-panel p-6 rounded-xl border border-primary/20 hover:border-primary/50 transition-colors">
-                <h3 className="text-textSecondary text-sm font-medium">Servicios (Vinculaciones)</h3>
+                <h3 className="text-textSecondary text-sm font-medium">Vinculaciones</h3>
                 <p className="text-3xl font-bold text-white mt-2">{reportes.serviciosVinculados || 0}</p>
                 <p className="text-xs text-emerald-400 mt-2">Totales históricos</p>
               </div>
               <div className="glass-panel p-6 rounded-xl border border-primary/20 hover:border-primary/50 transition-colors">
-                <h3 className="text-textSecondary text-sm font-medium">Ingresos Totales (Comisiones)</h3>
+                <h3 className="text-textSecondary text-sm font-medium">Ingresos Totales</h3>
                 <p className="text-3xl font-bold text-primary mt-2">Bs. {reportes.ingresosTotales || 0}</p>
-                <p className="text-xs text-emerald-400 mt-2">Generado por la plataforma</p>
+                <p className="text-xs text-emerald-400 mt-2">Generado por comisiones</p>
               </div>
               <div className="glass-panel p-6 rounded-xl border border-primary/20 hover:border-primary/50 transition-colors">
                 <h3 className="text-textSecondary text-sm font-medium">Tasa de Comisión</h3>
                 <p className="text-3xl font-bold text-accent mt-2">{comision}%</p>
                 <p className="text-xs text-emerald-400 mt-2">Configuración Actual</p>
+              </div>
+              <div className="glass-panel p-6 rounded-xl border border-primary/20 hover:border-primary/50 transition-colors">
+                <h3 className="text-textSecondary text-sm font-medium">Comisión Promedio por Servicio</h3>
+                <p className="text-3xl font-bold text-amber-400 mt-2">Bs. {reportes.serviciosVinculados > 0 ? (reportes.ingresosTotales / reportes.serviciosVinculados).toFixed(2) : '0.00'}</p>
+                <p className="text-xs text-emerald-400 mt-2">Comisión / Vinculación</p>
               </div>
             </div>
 
@@ -287,22 +381,22 @@ export const DashboardAdmin = () => {
               <div className="glass-panel rounded-xl border border-slate-700 p-6">
                 <h3 className="text-lg font-bold text-white mb-6">Ingresos por Comisiones (Últimos Días)</h3>
                 <div className="h-72 w-full flex items-end justify-around pb-4 pt-10 border-b border-l border-slate-700 relative">
-                  {(!reportes.transacciones || reportes.transacciones.length === 0) ? (
+                  {(!reportes.ingresosDiarios || reportes.ingresosDiarios.length === 0) ? (
                     <div className="absolute inset-0 flex items-center justify-center text-textSecondary">Sin datos suficientes</div>
                   ) : (
-                    reportes.transacciones.slice(0, 7).map((d: any, i: number) => {
-                      const maxMonto = Math.max(...reportes.transacciones.slice(0, 7).map((x:any) => parseFloat(x.monto)));
-                      const heightPercent = maxMonto > 0 ? (parseFloat(d.monto) / maxMonto) * 100 : 0;
+                    [...reportes.ingresosDiarios].reverse().map((d: any, i: number) => {
+                      const maxMonto = Math.max(...reportes.ingresosDiarios.map((x:any) => parseFloat(x.total_comision)), 1);
+                      const heightPercent = Math.max(Math.round((parseFloat(d.total_comision) / maxMonto) * 100), 8);
                       return (
-                        <div key={i} className="flex flex-col items-center group relative w-1/6">
-                          <div className="absolute -top-8 bg-slate-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 whitespace-nowrap">
-                            Bs. {d.monto}
+                        <div key={i} className="flex flex-col items-center group relative w-1/6 h-full justify-end">
+                          <div className="absolute -top-10 bg-slate-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 whitespace-nowrap shadow-lg">
+                            Bs. {parseFloat(d.total_comision).toFixed(2)} - {d.total_vinculaciones} Vinculaciones
                           </div>
                           <div 
-                            className="w-full max-w-[40px] bg-indigo-500 rounded-t-md hover:bg-indigo-400 transition-colors" 
-                            style={{ height: `${heightPercent}%`, minHeight: heightPercent > 0 ? '4px' : '0' }}
+                            className="w-full max-w-[40px] bg-gradient-to-t from-indigo-600 to-cyan-400 rounded-t-md hover:opacity-80 transition-opacity" 
+                            style={{ height: `${heightPercent}%`, minHeight: '8px' }}
                           ></div>
-                          <span className="text-xs text-slate-400 mt-2 truncate w-full text-center">{new Date(d.fecha).toLocaleDateString()}</span>
+                          <span className="text-xs text-slate-400 mt-2 truncate w-full text-center">{new Date(d.fecha).toLocaleDateString('es-BO', { timeZone: 'America/La_Paz', day: '2-digit', month: '2-digit' })}</span>
                         </div>
                       );
                     })
@@ -342,7 +436,7 @@ export const DashboardAdmin = () => {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-800/50 text-textSecondary text-sm border-b border-slate-700 sticky top-0 z-10">
-                      <th className="p-4 font-medium">ID</th>
+                      <th className="p-4 font-medium">#</th>
                       <th className="p-4 font-medium">Fecha</th>
                       <th className="p-4 font-medium">Prestador</th>
                       <th className="p-4 font-medium">Monto</th>
@@ -351,9 +445,12 @@ export const DashboardAdmin = () => {
                   <tbody className="divide-y divide-slate-700/50">
                     {(reportes.transacciones || []).map((t: any, idx: number) => (
                       <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
-                        <td className="p-4 text-textSecondary text-xs">{t.id}</td>
-                        <td className="p-4 text-textSecondary text-xs">{new Date(t.fecha).toLocaleString()}</td>
-                        <td className="p-4 text-white font-medium">{t.prestador}</td>
+                        <td className="p-4 text-textSecondary text-xs">{idx + 1}</td>
+                        <td className="p-4 text-textSecondary text-xs">{new Date(t.fecha).toLocaleString('es-BO', { timeZone: 'America/La_Paz' })}</td>
+                        <td className="p-4 text-white font-medium">
+                          {t.prestador}
+                          <div className="text-xs text-textSecondary font-normal">{t.prestador_especialidad}</div>
+                        </td>
                         <td className="p-4 text-emerald-400 font-bold">Bs. {t.monto}</td>
                       </tr>
                     ))}
@@ -421,7 +518,7 @@ export const DashboardAdmin = () => {
                   <tbody className="divide-y divide-slate-700/50">
                     {filteredUsers.map((u) => (
                       <tr key={u.id_usuario || u.id} className="hover:bg-slate-800/30 transition-colors group">
-                        <td className="p-4 text-textSecondary text-xs">{u.id_usuario || u.id}</td>
+                        <td className="p-4 text-textSecondary text-xs">USR-***{(u.id_usuario || u.id).toString().slice(-3)}</td>
                         <td className="p-4 text-white font-medium">{u.nombres} {u.apellidos}</td>
                         <td className="p-4 text-textSecondary">{u.email}</td>
                         <td className="p-4">

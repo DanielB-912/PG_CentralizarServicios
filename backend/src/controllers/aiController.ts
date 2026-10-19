@@ -17,7 +17,10 @@ export class AiController {
         'gemini-3.5-flash',
         'gemini-3.0-flash',
         'gemini-3.6-flash',
-        'gemini-2.0-flash'
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
+        'gemini-1.5-flash',
+        'gemini-1.5-pro'
       ];
 
       const systemInstruction = `Eres el asistente de navegación y accesibilidad de la plataforma de servicios técnicos y profesionales de Cochabamba.
@@ -97,6 +100,37 @@ Devuelve EXCLUSIVAMENTE un JSON plano (sin bloques markdown):
       }
 
       console.error("[AI Controller] Todos los modelos fallaron:", lastError);
+      
+      // Fallback local (Fail-Safe)
+      if (prompt) {
+        const p = prompt.toLowerCase();
+        let catAsignada: string | null = null;
+        
+        if (p.match(/plomero|agua|fuga|tubo|caño|gasfiter/)) catAsignada = "Plomería y Gasfitería";
+        else if (p.match(/luz|electric|enchufe|cable|corto|foco/)) catAsignada = "Electricidad Residencial e Industrial";
+        else if (p.match(/albañil|pared|techo|cemento|ladrillo|constru/)) catAsignada = "Albañilería y Construcción";
+        else if (p.match(/pintor|pintura|pintar|color/)) catAsignada = "Pintura y Acabados";
+        else if (p.match(/carpinter|madera|mueble|puerta/)) catAsignada = "Carpintería y Mueblería";
+        else if (p.match(/cerrajer|llave|chapa|candado|cerradura/)) catAsignada = "Cerrajería";
+        else if (p.match(/limpiez|aseo|desinfecci|lavar/)) catAsignada = "Limpieza Profunda y Desinfección";
+        else if (p.match(/computador|pc|redes|sistema|internet|software/)) catAsignada = "Ingeniería de Sistemas / Soporte Técnico / Redes";
+        else if (p.match(/auto|motor|freno|mecanic|llanta/)) catAsignada = "Mecánica y Auxilio Vehicular";
+        else if (p.match(/jardin|pasto|planta|arbol/)) catAsignada = "Jardinería y Paisajismo";
+        else if (p.match(/aire|refrigerador|frio|calefacci/)) catAsignada = "Climatización y Refrigeración";
+        else if (p.match(/contador|impuesto|finanza/)) catAsignada = "Contabilidad, Auditoría y Finanzas";
+        else if (p.match(/abogado|legal|ley|contrato/)) catAsignada = "Asesoría Legal y Jurídica";
+        else catAsignada = "Multiservicios / Arreglos Generales del Hogar";
+
+        console.log(`[AI Controller] Fallback local aplicado. Categoría: ${catAsignada}`);
+        return res.json({
+          action: "OPEN_SOLICITUD_MODAL",
+          intent: "CREAR_SOLICITUD",
+          categoriaInferida: catAsignada,
+          resumenProblema: "Requerimiento procesado por sistema de contingencia.",
+          spokenResponse: "Servicio clasificado localmente."
+        });
+      }
+
       return res.status(503).json({ success: false, message: "Servicio de IA temporalmente saturado, reintente en unos segundos." });
 
 

@@ -63,7 +63,7 @@ export class OfertaModel {
 
   static async findByPrestador(id_prestador: number): Promise<any[]> {
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT o.*, s.tipo_servicio, s.descripcion, s.descripcion as direccion, s.ubicacion_lat as latitud, s.ubicacion_lng as longitud, s.presupuesto, s.macrodistrito, s.fecha_solicitud, u.nombres as cliente_nombres, u.apellidos as cliente_apellidos, u.telefono as cliente_telefono 
+      `SELECT o.*, s.tipo_servicio, s.descripcion, u.direccion as direccion, s.ubicacion_lat as latitud, s.ubicacion_lng as longitud, s.presupuesto, s.macrodistrito, s.fecha_solicitud, u.nombres as cliente_nombres, u.apellidos as cliente_apellidos, u.telefono as cliente_telefono 
        FROM ofertas o
        INNER JOIN solicitudes s ON o.id_solicitud = s.id_solicitud
        INNER JOIN usuarios u ON s.id_cliente = u.id_usuario
