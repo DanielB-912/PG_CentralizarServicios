@@ -2,10 +2,24 @@ import { useState, useContext, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { Users, BarChart3, Settings, LogOut, Search, Plus, Edit2, Trash2, X, Briefcase, Mail, Lock, Eye, EyeOff, UserCircle, FileText, Check, XCircle, Download, Clock, RotateCcw } from 'lucide-react';
 import axios from 'axios';
+import { toast } from 'react-hot-toast';
+import { MapContainer, TileLayer, Marker, Circle } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
 import { ProfileModal } from '../components/ProfileModal';
 import { GlobalVoiceAssistant } from '../components/GlobalVoiceAssistant';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+let DefaultIcon = L.icon({
+  iconUrl: icon,
+  shadowUrl: iconShadow,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
 // Removed recharts
 const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
@@ -95,6 +109,15 @@ export const DashboardAdmin = () => {
   const [editingUser, setEditingUser] = useState<Partial<Usuario>>({});
   const [inspectingUser, setInspectingUser] = useState<Usuario | null>(null);
 
+  // Estado para Modal de Confirmación Personalizado
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    userId: string | number | null;
+    nuevoEstado: number;
+    accion: 'desactivar' | 'reactivar';
+    nombreUsuario: string;
+  }>({ isOpen: false, userId: null, nuevoEstado: 0, accion: 'desactivar', nombreUsuario: '' });
+
   // Estado para Configuración
   const [comision, setComision] = useState(5);
 
@@ -155,9 +178,10 @@ export const DashboardAdmin = () => {
       await axios.put('http://localhost:3001/api/admin/configuracion/comision', { comision }, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      alert('Configuración guardada exitosamente');
+      toast.success('Configuración guardada exitosamente');
     } catch (error) {
       console.error('Error al guardar config:', error);
+      toast.error('Error al guardar la configuración');
     }
   };
 
@@ -206,28 +230,51 @@ export const DashboardAdmin = () => {
       });
       setShowModal(false);
       setNewAdmin({ nombres: '', apellidos: '', email: '', contrasena: '', rol: 'ADMINISTRADOR' });
+      toast.success('Administrador registrado exitosamente');
       fetchUsers();
     } catch (error: any) {
       console.error('Error al registrar usuario:', error);
-      alert(error.response?.data?.error || 'Error al registrar usuario');
+      toast.error(error.response?.data?.error || 'Error al registrar usuario');
     }
   };
 
-  const handleToggleUser = async (id: string | number, currentEstado?: number) => {
-    const estadoActual = currentEstado !== undefined ? currentEstado : 1;
-    const accion = estadoActual === 1 ? 'desactivar' : 'reactivar';
-    const nuevoEstado = estadoActual === 1 ? 0 : 1;
-    if (confirm(`¿Está seguro de que desea ${accion} este usuario?`)) {
-      try {
-        await axios.patch(`http://localhost:3001/api/users/${id}/estado`, {
-          estado_activo: nuevoEstado
-        }, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        fetchUsers();
-      } catch (error) {
-        console.error(`Error al ${accion} usuario:`, error);
+  const handleToggleUser = (userTarget: Usuario) => {
+    const userId = userTarget.id_usuario || userTarget.id;
+    const currentEstado = Number(userTarget.estado_activo);
+    const accion = currentEstado === 1 ? 'desactivar' : 'reactivar';
+    const nuevoEstado = currentEstado === 1 ? 0 : 1;
+    const nombreUsuario = `${userTarget.nombres} ${userTarget.apellidos}`.trim();
+
+    setConfirmModal({
+      isOpen: true,
+      userId,
+      nuevoEstado,
+      accion,
+      nombreUsuario
+    });
+  };
+
+  const handleConfirmToggle = async () => {
+    if (!confirmModal.userId) return;
+    try {
+      await axios.patch(`http://localhost:3001/api/users/${confirmModal.userId}/estado`, {
+        estado_activo: confirmModal.nuevoEstado
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      toast.success(`Usuario ${confirmModal.accion === 'desactivar' ? 'desactivado' : 'reactivado'} correctamente`);
+
+      // Si estaba abierto el modal de inspección, actualizar su estado reactivamente sin cerrarlo abruptamente
+      if (inspectingUser && (inspectingUser.id_usuario === confirmModal.userId || inspectingUser.id === confirmModal.userId)) {
+        setInspectingUser(prev => prev ? ({ ...prev, estado_activo: confirmModal.nuevoEstado }) : null);
       }
+
+      setConfirmModal(prev => ({ ...prev, isOpen: false }));
+      fetchUsers();
+    } catch (error) {
+      console.error(`Error al ${confirmModal.accion} usuario:`, error);
+      toast.error(`Error al ${confirmModal.accion} usuario`);
     }
   };
 
@@ -606,7 +653,7 @@ export const DashboardAdmin = () => {
                               <Edit2 className="h-4 w-4" />
                             </button>
                             <button 
-                              onClick={() => handleToggleUser(u.id_usuario || u.id, Number(u.estado_activo))} 
+                              onClick={() => handleToggleUser(u)} 
                               className={`p-1.5 rounded-lg transition-colors ${
                                 Number(u.estado_activo) === 1 
                                   ? 'text-slate-400 hover:text-red-400 hover:bg-red-500/10' 
@@ -1187,20 +1234,10 @@ export const DashboardAdmin = () => {
                       <span className="text-white font-medium">{inspectingUser.macrodistrito || 'Cochabamba Centro'}</span>
                     </div>
                     <div>
-                      <span className="text-textSecondary text-xs block mb-0.5">Zona de Cobertura</span>
-                      <span className="text-white font-medium">
-                        {inspectingUser.radio_cobertura 
-                          ? `${inspectingUser.radio_cobertura} km a la redonda (${inspectingUser.zona_cobertura || inspectingUser.macrodistrito})`
-                          : inspectingUser.zona_cobertura?.trim() 
-                            ? inspectingUser.zona_cobertura 
-                            : 'Atención en todo su macrodistrito base'}
-                      </span>
-                    </div>
-                    <div>
                       <span className="text-textSecondary text-xs block mb-0.5">Disponibilidad Horaria</span>
                       <span className="text-white font-medium">{inspectingUser.disponibilidad_horaria || 'A convenir'}</span>
                     </div>
-                    <div>
+                    <div className="sm:col-span-2">
                       <span className="text-textSecondary text-xs block mb-0.5">Saldo en Monedero</span>
                       {parseFloat(inspectingUser.saldo?.toString() || '0') < 0 ? (
                         <div>
@@ -1214,6 +1251,44 @@ export const DashboardAdmin = () => {
                       )}
                     </div>
                   </div>
+
+                  {/* Minimapa de Cobertura */}
+                  {inspectingUser.lat_cobertura !== undefined && 
+                   inspectingUser.lat_cobertura !== null && 
+                   inspectingUser.lng_cobertura !== undefined && 
+                   inspectingUser.lng_cobertura !== null && 
+                   !isNaN(Number(inspectingUser.lat_cobertura)) && 
+                   !isNaN(Number(inspectingUser.lng_cobertura)) && 
+                   Number(inspectingUser.lat_cobertura) !== 0 && 
+                   Number(inspectingUser.lng_cobertura) !== 0 ? (
+                    <div className="mb-4">
+                      <span className="text-textSecondary text-xs block mb-1">Delimitación Geográfica de Cobertura</span>
+                      <div className="h-44 w-full rounded-xl overflow-hidden border border-slate-700 mt-2 z-0 relative">
+                        <MapContainer 
+                          center={[Number(inspectingUser.lat_cobertura), Number(inspectingUser.lng_cobertura)]} 
+                          zoom={13} 
+                          dragging={false} 
+                          scrollWheelZoom={false} 
+                          className="h-full w-full"
+                        >
+                          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
+                          <Marker position={[Number(inspectingUser.lat_cobertura), Number(inspectingUser.lng_cobertura)]}/>
+                          <Circle 
+                            center={[Number(inspectingUser.lat_cobertura), Number(inspectingUser.lng_cobertura)]} 
+                            radius={Number(inspectingUser.radio_cobertura) || 3000} 
+                            pathOptions={{ color: '#6366f1', fillColor: '#6366f1', fillOpacity: 0.2 }}
+                          />
+                        </MapContainer>
+                      </div>
+                      <p className="text-xs text-slate-300 mt-2 font-medium bg-slate-800/80 p-2.5 rounded-xl border border-slate-700">
+                        📍 Radio de cobertura: {inspectingUser.radio_cobertura ? `${(Number(inspectingUser.radio_cobertura) / 1000).toFixed(1)} km` : '3 km'} a la redonda ({inspectingUser.zona_cobertura || inspectingUser.macrodistrito})
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mb-4 bg-slate-800/50 border border-slate-700/60 rounded-xl p-3.5 text-xs text-textSecondary">
+                      El prestador no delimitó un área geográfica específica; atiende en todo su macrodistrito base ({inspectingUser.macrodistrito || 'Cochabamba Centro'}).
+                    </div>
+                  )}
 
                   <div className="border-t border-slate-800 pt-3">
                     <span className="text-textSecondary text-xs block mb-1">Descripción / Biografía</span>
@@ -1261,25 +1336,7 @@ export const DashboardAdmin = () => {
                   <Edit2 className="h-4 w-4" /> Editar Usuario
                 </button>
                 <button 
-                  onClick={async () => {
-                    const idToToggle = inspectingUser.id_usuario || inspectingUser.id;
-                    const currentEstado = Number(inspectingUser.estado_activo);
-                    const nuevoEstado = currentEstado === 1 ? 0 : 1;
-                    const accion = currentEstado === 1 ? 'desactivar' : 'reactivar';
-                    if (confirm(`¿Está seguro de que desea ${accion} este usuario?`)) {
-                      try {
-                        await axios.patch(`http://localhost:3001/api/users/${idToToggle}/estado`, {
-                          estado_activo: nuevoEstado
-                        }, {
-                          headers: { Authorization: `Bearer ${token}` }
-                        });
-                        setInspectingUser(prev => prev ? ({ ...prev, estado_activo: nuevoEstado }) : null);
-                        fetchUsers();
-                      } catch (error) {
-                        console.error(`Error al ${accion} usuario:`, error);
-                      }
-                    }
-                  }} 
+                  onClick={() => handleToggleUser(inspectingUser)} 
                   className={`py-3 px-4 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 border ${
                     Number(inspectingUser.estado_activo) === 1 
                       ? 'bg-red-500/20 hover:bg-red-500/30 text-red-300 border-red-500/40' 
@@ -1297,6 +1354,38 @@ export const DashboardAdmin = () => {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmación Personalizado (Dark Mode) */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-surface border border-slate-700 rounded-2xl p-6 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-bold text-white mb-2">¿Confirmar acción?</h3>
+            <p className="text-sm text-textSecondary mb-6 leading-relaxed">
+              ¿Está seguro de que desea <strong className={confirmModal.accion === 'desactivar' ? 'text-red-400 font-semibold' : 'text-emerald-400 font-semibold'}>{confirmModal.accion}</strong> al usuario <strong className="text-white">{confirmModal.nombreUsuario}</strong>?
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                className="py-2.5 px-4 rounded-xl font-medium text-textSecondary hover:bg-slate-800 transition-colors border border-slate-700"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmToggle}
+                className={`py-2.5 px-5 rounded-xl font-medium transition-all ${
+                  confirmModal.accion === 'desactivar'
+                    ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-600/30'
+                    : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/30'
+                }`}
+              >
+                Confirmar
+              </button>
             </div>
           </div>
         </div>

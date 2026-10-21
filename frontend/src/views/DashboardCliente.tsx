@@ -1,6 +1,6 @@
 import { useState, useContext, useEffect, useRef } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { LogOut, Search, MapPin, Map as MapIcon, History, Star, X, Loader2, Send, CheckCircle, UserCircle, Mic } from 'lucide-react';
+import { LogOut, Search, MapPin, Map as MapIcon, History, Star, X, Loader2, Send, CheckCircle, UserCircle, Mic, Check } from 'lucide-react';
 import { ProfileModal } from '../components/ProfileModal';
 import { TecnicoPublicProfileModal } from '../components/TecnicoPublicProfileModal';
 import { GlobalVoiceAssistant } from '../components/GlobalVoiceAssistant';
@@ -242,6 +242,12 @@ export const DashboardCliente = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
       toast.success('¡Gracias por tu calificación!');
+      setMisSolicitudes(prev => prev.map(sol => {
+        if (sol.id_vinculacion === ratingModal.idVinculacion || sol.id_solicitud === ratingModal.idVinculacion) {
+          return { ...sol, calificado: true, id_calificacion: 1 };
+        }
+        return sol;
+      }));
       setRatingModal({ isOpen: false, idVinculacion: null, prestadorName: '' });
       setRatingForm({ score: 5, comment: '' });
       fetchMisSolicitudes();
@@ -278,6 +284,7 @@ export const DashboardCliente = () => {
   };
   const [dictadoState, setDictadoState] = useState<'inactivo' | 'escuchando' | 'analizando'>('inactivo');
   const dictadoStateRef = useRef<'inactivo' | 'escuchando' | 'analizando'>('inactivo');
+  const transcriptDictadoRef = useRef<string>('');
   const recognitionRef = useRef<any>(null);
   const analyzeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const voiceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -317,6 +324,7 @@ export const DashboardCliente = () => {
     } catch (e) {
       console.error("Error al procesar inferencia:", e);
     } finally {
+      transcriptDictadoRef.current = '';
       updateDictadoState('inactivo');
     }
   };
@@ -360,44 +368,63 @@ export const DashboardCliente = () => {
         
         if (finalTranscript) {
           setRequestForm(prev => ({ ...prev, descripcion: finalTranscript }));
+          transcriptDictadoRef.current = finalTranscript;
           
           if (voiceTimeoutRef.current) clearTimeout(voiceTimeoutRef.current);
           voiceTimeoutRef.current = setTimeout(async () => {
-            try {
-              recognitionRef.current?.stop();
-            } catch {}
-            updateDictadoState('analizando');
-            await procesarInferenciaSemantica(finalTranscript);
-          }, 1500); // 1.5 segundos de pausa natural antes de procesar y detener
+            if (dictadoStateRef.current === 'escuchando') {
+              try {
+                recognitionRef.current?.stop();
+              } catch {}
+              updateDictadoState('analizando');
+              await procesarInferenciaSemantica(finalTranscript);
+            }
+          }, 1200); // 1.2 segundos de pausa natural antes de procesar y detener
         }
       };
 
       recognitionRef.current.onerror = (event: any) => {
         console.error('Error de reconocimiento de voz', event);
         if (voiceTimeoutRef.current) clearTimeout(voiceTimeoutRef.current);
-        updateDictadoState('inactivo');
-      };
-      
-      recognitionRef.current.onend = () => {
-        if (dictadoStateRef.current === 'escuchando') {
+        if (dictadoStateRef.current !== 'analizando') {
           updateDictadoState('inactivo');
         }
       };
+      
+      recognitionRef.current.onend = async () => {
+        if (voiceTimeoutRef.current) clearTimeout(voiceTimeoutRef.current);
+        if (dictadoStateRef.current === 'escuchando') {
+          const textToProcess = transcriptDictadoRef.current.trim() || requestForm.descripcion.trim();
+          if (textToProcess.length >= 4) {
+            updateDictadoState('analizando');
+            await procesarInferenciaSemantica(textToProcess);
+          } else {
+            updateDictadoState('inactivo');
+          }
+        }
+      };
     }
-  }, [selectedCategory]);
+  }, [selectedCategory, requestForm.descripcion]);
 
   const toggleListen = () => {
     if (dictadoState === 'analizando') return;
 
     if (dictadoState === 'escuchando') {
+      if (voiceTimeoutRef.current) clearTimeout(voiceTimeoutRef.current);
       try {
         recognitionRef.current?.stop();
       } catch {}
-      if (voiceTimeoutRef.current) clearTimeout(voiceTimeoutRef.current);
-      updateDictadoState('inactivo');
+      const textToProcess = transcriptDictadoRef.current.trim() || requestForm.descripcion.trim();
+      if (textToProcess.length >= 4) {
+        updateDictadoState('analizando');
+        procesarInferenciaSemantica(textToProcess);
+      } else {
+        updateDictadoState('inactivo');
+      }
     } else {
       if (recognitionRef.current) {
         try {
+          transcriptDictadoRef.current = '';
           recognitionRef.current.start();
           updateDictadoState('escuchando');
         } catch (err) {
@@ -874,14 +901,25 @@ export const DashboardCliente = () => {
                           <CheckCircle className="h-5 w-5" />
                           <span className="font-bold text-sm md:text-base">✅ Solicitud Vinculada con {sol.prestador_nombres} {sol.prestador_apellidos} (+591 {sol.prestador_telefono})</span>
                         </div>
-                        <p className="text-sm text-emerald-200/70 ml-7 italic mb-2">Al finalizar el servicio, califica al técnico en la plataforma.</p>
+                        <p className="text-sm text-emerald-200/70 ml-7 italic mb-2">
+                          {sol.calificado || sol.id_calificacion ? 'Servicio concluido y calificado exitosamente.' : 'Al finalizar el servicio, califica al técnico en la plataforma.'}
+                        </p>
                         
-                        <button 
-                          onClick={() => setRatingModal({ isOpen: true, idVinculacion: sol.id_vinculacion || sol.id_solicitud, prestadorName: `${sol.prestador_nombres} ${sol.prestador_apellidos}` })}
-                          className="ml-7 bg-amber-500 hover:bg-amber-600 text-white rounded-lg py-2 px-4 text-sm font-bold w-max transition-colors flex items-center gap-2"
-                        >
-                          <Star className="h-4 w-4 fill-white" /> Calificar Servicio
-                        </button>
+                        {sol.calificado || sol.id_calificacion ? (
+                          <button 
+                            disabled 
+                            className="ml-7 bg-slate-800/80 text-emerald-400 border border-emerald-500/30 rounded-lg py-2 px-4 text-sm font-medium w-max flex items-center gap-2 cursor-default"
+                          >
+                            <Check className="h-4 w-4 text-emerald-400"/> Servicio Calificado
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={() => setRatingModal({ isOpen: true, idVinculacion: sol.id_vinculacion || sol.id_solicitud, prestadorName: `${sol.prestador_nombres} ${sol.prestador_apellidos}` })}
+                            className="ml-7 bg-amber-500 hover:bg-amber-600 text-white rounded-lg py-2 px-4 text-sm font-bold w-max transition-colors flex items-center gap-2"
+                          >
+                            <Star className="h-4 w-4 fill-white" /> Calificar Servicio
+                          </button>
+                        )}
                       </div>
                     )}
 

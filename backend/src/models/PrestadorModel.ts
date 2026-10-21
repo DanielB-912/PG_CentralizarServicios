@@ -75,6 +75,7 @@ export class PrestadorModel {
   static async findFiltered(filtros: { especialidad?: string, macrodistrito?: string }): Promise<any[]> {
     let query = `
       SELECT p.*, u.nombres, u.apellidos, u.foto_url,
+             (SELECT COUNT(*) FROM vinculaciones v WHERE v.id_prestador = p.id_prestador) as trabajos_realizados,
              (SELECT AVG(c.puntuacion) FROM calificaciones c 
               INNER JOIN vinculaciones v ON c.id_vinculacion = v.id_vinculacion 
               WHERE v.id_prestador = p.id_prestador) as calificacion_promedio
@@ -101,6 +102,7 @@ export class PrestadorModel {
       SELECT p.id_prestador, p.especialidad, p.descripcion_profesional, p.macrodistrito, 
              p.lat_cobertura, p.lng_cobertura, p.radio_cobertura,
              u.nombres, u.apellidos, u.foto_url, u.telefono,
+             (SELECT COUNT(*) FROM vinculaciones v WHERE v.id_prestador = p.id_prestador) as trabajos_realizados,
              (SELECT AVG(c.puntuacion) FROM calificaciones c 
               INNER JOIN vinculaciones v ON c.id_vinculacion = v.id_vinculacion 
               WHERE v.id_prestador = p.id_prestador) as calificacion_promedio,
@@ -119,6 +121,7 @@ export class PrestadorModel {
       SELECT p.id_prestador, p.especialidad, p.descripcion_profesional, p.macrodistrito, 
              p.lat_cobertura, p.lng_cobertura, p.radio_cobertura,
              u.nombres, u.apellidos, u.foto_url, u.telefono,
+             (SELECT COUNT(*) FROM vinculaciones v WHERE v.id_prestador = p.id_prestador) as trabajos_realizados,
              (SELECT AVG(c.puntuacion) FROM calificaciones c 
               INNER JOIN vinculaciones v ON c.id_vinculacion = v.id_vinculacion 
               WHERE v.id_prestador = p.id_prestador) as calificacion_promedio,
@@ -147,6 +150,7 @@ export class PrestadorModel {
       SELECT p.id_prestador, p.especialidad, p.descripcion_profesional, p.macrodistrito, 
              p.disponibilidad_horaria, p.zona_cobertura, p.lat_cobertura, p.lng_cobertura, p.radio_cobertura,
              u.nombres, u.apellidos, u.foto_url, u.telefono, u.rol,
+             (SELECT COUNT(*) FROM vinculaciones v WHERE v.id_prestador = p.id_prestador) as trabajos_realizados,
              (SELECT AVG(c.puntuacion) FROM calificaciones c 
               INNER JOIN vinculaciones v ON c.id_vinculacion = v.id_vinculacion 
               WHERE v.id_prestador = p.id_prestador) as calificacion_promedio,

@@ -134,9 +134,17 @@ export const TecnicoPublicProfileModal: React.FC<TecnicoPublicProfileModalProps>
                       <span className="text-xs font-medium text-slate-400">Zona de Cobertura:</span>
                       <span className="text-sm font-semibold text-white break-words">{profile.zona_cobertura || 'Todo el macrodistrito'}</span>
                     </li>
-                    <li className="flex justify-between pt-2 border-t border-slate-700/50">
+                    <li className="flex justify-between items-center pt-2 border-t border-slate-700/50">
                       <span className="text-textSecondary">Trabajos Realizados</span>
-                      <span className="text-white font-medium">{profile.trabajos_realizados || 0}</span>
+                      {Number(profile.trabajos_realizados) > 0 ? (
+                        <span className="text-white font-medium">
+                          {profile.trabajos_realizados} {Number(profile.trabajos_realizados) === 1 ? 'servicio' : 'servicios'}
+                        </span>
+                      ) : (
+                        <span className="text-amber-400 text-xs font-medium bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/30">
+                          Nuevo talento
+                        </span>
+                      )}
                     </li>
                     <li className="flex justify-between pt-2 border-t border-slate-700/50">
                       <span className="text-textSecondary">Estado</span>
