@@ -145,7 +145,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
       }));
 
       if (user?.rol === 'PRESTADOR_TECNICO') {
-        axios.get('http://localhost:3001/api/prestadores/me', {
+        axios.get('/api/prestadores/me', {
           headers: { Authorization: `Bearer ${token}` }
         }).then(res => {
           // Mapeo legacy
@@ -192,7 +192,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
       const data = new FormData();
       data.append('avatar', file);
 
-      const res = await axios.post('http://localhost:3001/api/users/me/avatar', data, {
+      const res = await axios.post('/api/users/me/avatar', data, {
         headers: { 
           Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data'
@@ -222,7 +222,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
     try {
       setStatus('loading');
       await axios.put(
-        'http://localhost:3001/api/users/me/password',
+        '/api/users/me/password',
         {
           contrasenaActual: currentPassword,
           nuevaContrasena: newPassword
@@ -264,7 +264,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
       };
 
       const res = await axios.put(
-        'http://localhost:3001/api/users/me/profile',
+        '/api/users/me/profile',
         payload,
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -306,11 +306,19 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
                 
                 {/* Avatar with Dual Selector */}
                 <div className="relative group mb-4">
-                  <div className="h-28 w-28 rounded-full bg-slate-700 border-4 border-surface shadow-lg overflow-hidden flex items-center justify-center text-3xl font-bold text-primary">
-                    {formData.foto_url ? (
-                      <img src={formData.foto_url} alt="avatar" className="h-full w-full object-cover" />
-                    ) : (
-                      user?.nombres.charAt(0)
+                  <div className="h-28 w-28 rounded-full bg-slate-700 border-4 border-surface shadow-lg overflow-hidden flex items-center justify-center text-3xl font-bold text-primary relative">
+                    <span className="absolute inset-0 flex items-center justify-center">
+                      {user?.nombres?.charAt(0) || 'U'}
+                    </span>
+                    {formData.foto_url && (
+                      <img 
+                        src={formData.foto_url.startsWith('http') || formData.foto_url.startsWith('/') ? formData.foto_url : `/uploads/${formData.foto_url}`} 
+                        alt="avatar" 
+                        className="h-full w-full object-cover relative z-10" 
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }} 
+                      />
                     )}
                   </div>
                   
@@ -322,13 +330,12 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
                     <Camera className="h-8 w-8 text-white mb-1" />
                     <span className="text-[10px] text-white font-medium">Cambiar</span>
                   </div>
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    capture="user" 
-                    ref={fileInputRef} 
-                    onChange={handleAvatarUpload} 
-                    className="hidden" 
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleAvatarUpload}
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    className="hidden"
                   />
                   
                   {isUploadingAvatar && (
@@ -380,7 +387,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
                               </span>
                             </div>
                             <a 
-                              href={cred.documento_url.startsWith('http') ? cred.documento_url : `http://localhost:3001${cred.documento_url}`} 
+                              href={cred.documento_url.startsWith('http') ? cred.documento_url : (cred.documento_url.startsWith('/') ? cred.documento_url : `/${cred.documento_url}`)} 
                               target="_blank" 
                               rel="noreferrer"
                               className="text-xs text-center bg-slate-700 hover:bg-slate-600 text-white py-1 rounded transition-colors"

@@ -139,7 +139,7 @@ export const DashboardAdmin = () => {
 
   const fetchReportes = async () => {
     try {
-      const response = await axios.get('http://localhost:3001/api/admin/reportes', {
+      const response = await axios.get('/api/admin/reportes', {
         headers: { Authorization: `Bearer ${token}` }
       });
       console.log("Datos Reportes Admin recibidos:", response.data);
@@ -151,7 +151,7 @@ export const DashboardAdmin = () => {
 
   const fetchUsers = async () => {
     try {
-      const response = await axios.get('http://localhost:3001/api/users', {
+      const response = await axios.get('/api/users', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setUsuarios(response.data);
@@ -162,7 +162,7 @@ export const DashboardAdmin = () => {
 
   const fetchConfig = async () => {
     try {
-      const response = await axios.get('http://localhost:3001/api/admin/configuracion/comision', {
+      const response = await axios.get('/api/admin/configuracion/comision', {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.data.comision) {
@@ -175,7 +175,7 @@ export const DashboardAdmin = () => {
 
   const saveConfig = async () => {
     try {
-      await axios.put('http://localhost:3001/api/admin/configuracion/comision', { comision }, {
+      await axios.put('/api/admin/configuracion/comision', { comision }, {
         headers: { Authorization: `Bearer ${token}` }
       });
       toast.success('Configuración guardada exitosamente');
@@ -187,7 +187,7 @@ export const DashboardAdmin = () => {
 
   const fetchCredenciales = async () => {
     try {
-      const response = await axios.get('http://localhost:3001/api/admin/credenciales/pendientes', {
+      const response = await axios.get('/api/admin/credenciales/pendientes', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setCredenciales(response.data);
@@ -198,7 +198,7 @@ export const DashboardAdmin = () => {
 
   const handleValidarCredencial = async (id: number, estado: string, tipoDocumentoActualizado?: string) => {
     try {
-      await axios.put(`http://localhost:3001/api/admin/credenciales/${id}/validar`, {
+      await axios.put(`/api/admin/credenciales/${id}/validar`, {
         estado_validacion: estado,
         observaciones_admin: '',
         tipo_documento: tipoDocumentoActualizado
@@ -221,7 +221,7 @@ export const DashboardAdmin = () => {
     const cleanApellidos = newAdmin.apellidos.trim();
 
     try {
-      await axios.post('http://localhost:3001/api/auth/register', {
+      await axios.post('/api/auth/register', {
         ...newAdmin,
         email: cleanEmail,
         contrasena: cleanPassword,
@@ -257,7 +257,7 @@ export const DashboardAdmin = () => {
   const handleConfirmToggle = async () => {
     if (!confirmModal.userId) return;
     try {
-      await axios.patch(`http://localhost:3001/api/users/${confirmModal.userId}/estado`, {
+      await axios.patch(`/api/users/${confirmModal.userId}/estado`, {
         estado_activo: confirmModal.nuevoEstado
       }, {
         headers: { Authorization: `Bearer ${token}` }
@@ -288,7 +288,7 @@ export const DashboardAdmin = () => {
   const submitEditUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await axios.put(`http://localhost:3001/api/users/${editingUser.id_usuario}`, {
+      await axios.put(`/api/users/${editingUser.id_usuario}`, {
         nombres: editingUser.nombres,
         apellidos: editingUser.apellidos,
         telefono: editingUser.telefono,
@@ -717,7 +717,7 @@ export const DashboardAdmin = () => {
                   </select>
                   
                   <button 
-                    onClick={() => setDocumentViewer({ isOpen: true, url: `http://localhost:3001${cred.documento_url}`, type: cred.documento_url.endsWith('.pdf') ? 'pdf' : 'image' })}
+                    onClick={() => setDocumentViewer({ isOpen: true, url: cred.documento_url.startsWith('http') ? cred.documento_url : cred.documento_url, type: cred.documento_url.endsWith('.pdf') ? 'pdf' : 'image' })}
                     className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl mb-4 transition-colors text-sm font-medium border border-slate-600/50"
                   >
                     <Eye className="h-4 w-4" /> Visualizar Documento
@@ -909,8 +909,20 @@ export const DashboardAdmin = () => {
             </div>
             
             <button onClick={() => setShowDropdown(!showDropdown)} className="focus:outline-none">
-              <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-bold shadow-lg ring-2 ring-primary/20 hover:ring-primary/50 transition-all">
-                {user?.nombres?.charAt(0) || 'A'}
+              <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-bold shadow-lg ring-2 ring-primary/20 hover:ring-primary/50 transition-all overflow-hidden relative">
+                <span className="absolute inset-0 flex items-center justify-center">
+                  {user?.nombres?.charAt(0) || 'A'}
+                </span>
+                {user?.foto_url && (
+                  <img 
+                    src={user.foto_url.startsWith('http') || user.foto_url.startsWith('/') ? user.foto_url : `/uploads/${user.foto_url}`} 
+                    alt="avatar" 
+                    className="w-full h-full object-cover relative z-10" 
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }} 
+                  />
+                )}
               </div>
             </button>
 
@@ -927,6 +939,34 @@ export const DashboardAdmin = () => {
             )}
           </div>
         </header>
+
+        {/* Selector de Pestañas Móvil para Administrador */}
+        <div className="md:hidden flex bg-surface border-b border-slate-700 p-2 gap-2 overflow-x-auto shrink-0 custom-scrollbar">
+          <button 
+            onClick={() => setActiveTab('metricas')} 
+            className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${activeTab === 'metricas' ? 'bg-primary text-white shadow-md' : 'text-textSecondary hover:bg-slate-800'}`}
+          >
+            Métricas
+          </button>
+          <button 
+            onClick={() => setActiveTab('usuarios')} 
+            className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${activeTab === 'usuarios' ? 'bg-primary text-white shadow-md' : 'text-textSecondary hover:bg-slate-800'}`}
+          >
+            Usuarios
+          </button>
+          <button 
+            onClick={() => setActiveTab('credenciales')} 
+            className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${activeTab === 'credenciales' ? 'bg-primary text-white shadow-md' : 'text-textSecondary hover:bg-slate-800'}`}
+          >
+            Credenciales
+          </button>
+          <button 
+            onClick={() => setActiveTab('configuracion')} 
+            className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${activeTab === 'configuracion' ? 'bg-primary text-white shadow-md' : 'text-textSecondary hover:bg-slate-800'}`}
+          >
+            Configuración
+          </button>
+        </div>
 
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar">
@@ -1165,11 +1205,19 @@ export const DashboardAdmin = () => {
             </button>
             
             <div className="flex items-start gap-4 mb-6">
-              <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-bold text-2xl shadow-lg shrink-0 overflow-hidden border border-indigo-500/40">
-                {inspectingUser.foto_url ? (
-                  <img src={inspectingUser.foto_url} alt="Avatar" className="w-full h-full object-cover" />
-                ) : (
-                  inspectingUser.nombres?.charAt(0) || 'U'
+              <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-bold text-2xl shadow-lg shrink-0 overflow-hidden border border-indigo-500/40 relative">
+                <span className="absolute inset-0 flex items-center justify-center">
+                  {inspectingUser.nombres?.charAt(0) || 'U'}
+                </span>
+                {inspectingUser.foto_url && (
+                  <img 
+                    src={inspectingUser.foto_url.startsWith('http') || inspectingUser.foto_url.startsWith('/') ? inspectingUser.foto_url : `/uploads/${inspectingUser.foto_url}`} 
+                    alt="avatar" 
+                    className="w-full h-full object-cover relative z-10" 
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }} 
+                  />
                 )}
               </div>
               <div className="flex-1 min-w-0 pr-8">

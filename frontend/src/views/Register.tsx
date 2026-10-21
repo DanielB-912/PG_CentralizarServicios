@@ -63,7 +63,7 @@ export const Register = () => {
         email: cleanEmail,
         contrasena: cleanContrasena
       };
-      const res = await axios.post('http://localhost:3001/api/auth/register', sanitizedData);
+      const res = await axios.post('/api/auth/register', sanitizedData);
       if (res.status === 201 || res.status === 200) {
         setSuccess('Usuario registrado exitosamente. Redirigiendo al inicio de sesión...');
         setError('');

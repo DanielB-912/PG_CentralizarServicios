@@ -34,7 +34,7 @@ export const Login = () => {
       localStorage.removeItem('user');
       delete axios.defaults.headers.common['Authorization'];
 
-      const res = await axios.post('http://localhost:3001/api/auth/login', {
+      const res = await axios.post('/api/auth/login', {
         email: cleanEmail,
         contrasena: cleanPassword
       });

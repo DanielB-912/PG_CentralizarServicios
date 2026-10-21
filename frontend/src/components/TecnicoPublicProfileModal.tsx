@@ -32,10 +32,10 @@ export const TecnicoPublicProfileModal: React.FC<TecnicoPublicProfileModalProps>
     if (isOpen && id_prestador) {
       setLoading(true);
       Promise.all([
-        axios.get(`http://localhost:3001/api/prestadores/${id_prestador}`, {
+        axios.get(`/api/prestadores/${id_prestador}`, {
           headers: { Authorization: `Bearer ${token}` }
         }),
-        axios.get(`http://localhost:3001/api/prestadores/${id_prestador}/resenas`, {
+        axios.get(`/api/prestadores/${id_prestador}/resenas`, {
           headers: { Authorization: `Bearer ${token}` }
         })
       ])
@@ -82,11 +82,19 @@ export const TecnicoPublicProfileModal: React.FC<TecnicoPublicProfileModalProps>
         ) : profile ? (
           <div className="px-6 pb-6 -mt-16 relative z-10">
             <div className="flex flex-col sm:flex-row gap-6 items-center sm:items-end mb-6">
-              <div className="h-32 w-32 rounded-full bg-slate-800 border-4 border-surface shadow-xl flex items-center justify-center text-4xl font-bold text-primary overflow-hidden shrink-0">
-                {profile.foto_url ? (
-                  <img src={profile.foto_url} alt="avatar" className="h-full w-full object-cover" />
-                ) : (
-                  profile.nombres?.charAt(0) || 'T'
+              <div className="h-32 w-32 rounded-full bg-slate-800 border-4 border-surface shadow-xl flex items-center justify-center text-4xl font-bold text-primary overflow-hidden shrink-0 relative">
+                <span className="absolute inset-0 flex items-center justify-center">
+                  {profile.nombres?.charAt(0) || 'T'}
+                </span>
+                {profile.foto_url && (
+                  <img 
+                    src={profile.foto_url.startsWith('http') || profile.foto_url.startsWith('/') ? profile.foto_url : `/uploads/${profile.foto_url}`} 
+                    alt="avatar" 
+                    className="h-full w-full object-cover relative z-10" 
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }} 
+                  />
                 )}
               </div>
               <div className="text-center sm:text-left flex-1 pb-2">
@@ -188,7 +196,7 @@ export const TecnicoPublicProfileModal: React.FC<TecnicoPublicProfileModalProps>
                               </div>
                             ) : (
                               <a 
-                                href={doc.documento_url.startsWith('http') ? doc.documento_url : `http://localhost:3001${doc.documento_url}`} 
+                                href={doc.documento_url.startsWith('http') ? doc.documento_url : doc.documento_url} 
                                 target="_blank" 
                                 rel="noreferrer"
                                 className="w-full text-center bg-slate-700 hover:bg-slate-600 text-white text-sm py-2 rounded transition-colors mt-1 block"

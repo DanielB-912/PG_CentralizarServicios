@@ -41,7 +41,7 @@ export const GlobalVoiceAssistant = ({ onCommand, role }: GlobalVoiceAssistantPr
     updateState('analizando');
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.post('http://localhost:3001/api/ai/intent', {
+      const res = await axios.post('/api/ai/intent', {
         prompt: text,
         userRole: role
       }, {
@@ -138,6 +138,12 @@ export const GlobalVoiceAssistant = ({ onCommand, role }: GlobalVoiceAssistantPr
   const toggleListen = () => {
     if (assistantState === 'analizando') return;
 
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.error("Para usar comandos de voz en el móvil, accede mediante HTTPS y acepta los permisos de micrófono.");
+      return;
+    }
+
     if (assistantState === 'escuchando') {
       if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
       try {
@@ -150,6 +156,13 @@ export const GlobalVoiceAssistant = ({ onCommand, role }: GlobalVoiceAssistantPr
         updateState('inactivo');
       }
     } else {
+      if ('speechSynthesis' in window) {
+        try {
+          const unlock = new SpeechSynthesisUtterance('');
+          window.speechSynthesis.speak(unlock);
+        } catch {}
+      }
+
       if (recognitionRef.current) {
         try {
           window.speechSynthesis.cancel();
@@ -162,7 +175,7 @@ export const GlobalVoiceAssistant = ({ onCommand, role }: GlobalVoiceAssistantPr
           updateState('inactivo');
         }
       } else {
-        toast.error('Tu navegador no soporta comandos de voz.');
+        toast.error("Para usar comandos de voz en el móvil, accede mediante HTTPS y acepta los permisos de micrófono.");
       }
     }
   };

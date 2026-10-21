@@ -1,6 +1,6 @@
 import { useState, useContext, useEffect, useRef } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { LogOut, Search, MapPin, Map as MapIcon, History, Star, X, Loader2, Send, CheckCircle, UserCircle, Mic, Check } from 'lucide-react';
+import { LogOut, Search, MapPin, Map as MapIcon, History, Star, X, Loader2, Send, CheckCircle, UserCircle, Mic, Check, Users } from 'lucide-react';
 import { ProfileModal } from '../components/ProfileModal';
 import { TecnicoPublicProfileModal } from '../components/TecnicoPublicProfileModal';
 import { GlobalVoiceAssistant } from '../components/GlobalVoiceAssistant';
@@ -102,6 +102,7 @@ export const DashboardCliente = () => {
 
   const [verificados, setVerificados] = useState<any[]>([]);
   const [cercanos, setCercanos] = useState<any[]>([]);
+  const [showMobileSuggestedDrawer, setShowMobileSuggestedDrawer] = useState(false);
 
   // Rating Modal
   const [ratingModal, setRatingModal] = useState<{ isOpen: boolean; idVinculacion: number | null; prestadorName: string }>({ isOpen: false, idVinculacion: null, prestadorName: '' });
@@ -131,7 +132,7 @@ export const DashboardCliente = () => {
       const query = new URLSearchParams({ macrodistrito });
       if (selectedCategory) query.append('especialidad', selectedCategory);
       
-      const res = await axios.get(`http://localhost:3001/api/prestadores/cercanos?${query.toString()}`, {
+      const res = await axios.get(`/api/prestadores/cercanos?${query.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setCercanos(res.data);
@@ -143,7 +144,7 @@ export const DashboardCliente = () => {
   const fetchVerificados = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:3001/api/prestadores/verificados', {
+      const res = await axios.get('/api/prestadores/verificados', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setVerificados(res.data);
@@ -155,7 +156,7 @@ export const DashboardCliente = () => {
   const fetchMisSolicitudes = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:3001/api/solicitudes/me', {
+      const res = await axios.get('/api/solicitudes/me', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setMisSolicitudes(res.data);
@@ -167,7 +168,7 @@ export const DashboardCliente = () => {
   const fetchOfertas = async (id_solicitud: number) => {
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.get(`http://localhost:3001/api/ofertas/${id_solicitud}`, {
+      const res = await axios.get(`/api/ofertas/${id_solicitud}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setOfertasActuales(res.data);
@@ -181,7 +182,7 @@ export const DashboardCliente = () => {
   const handleAceptarOferta = async (id_solicitud: number, id_prestador: number, monto_ofertado: number) => {
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.post('http://localhost:3001/api/vinculaciones/aceptar', {
+      const res = await axios.post('/api/vinculaciones/aceptar', {
         id_solicitud,
         id_prestador,
         monto_ofertado
@@ -214,7 +215,7 @@ export const DashboardCliente = () => {
     }
     try {
       const token = localStorage.getItem('token');
-      await axios.put(`http://localhost:3001/api/ofertas/${id_oferta}/contraoferta`, {
+      await axios.put(`/api/ofertas/${id_oferta}/contraoferta`, {
         monto_ofertado: contraofertaForm.monto,
         mensaje_propuesta: contraofertaForm.mensaje
       }, {
@@ -234,7 +235,7 @@ export const DashboardCliente = () => {
     if (!ratingModal.idVinculacion) return;
     try {
       const token = localStorage.getItem('token');
-      await axios.post('http://localhost:3001/api/calificaciones', {
+      await axios.post('/api/calificaciones', {
         id_vinculacion: ratingModal.idVinculacion,
         puntuacion: ratingForm.score,
         comentario: ratingForm.comment
@@ -258,29 +259,49 @@ export const DashboardCliente = () => {
   };
 
   const handleGetLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
-          setSelectedPosition(latlng);
-          setMapCenter(latlng);
-          mapRef.current?.flyTo(latlng, 16);
-
-          fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&accept-language=es`)
-            .then(res => res.json())
-            .then(data => {
-              const calle = data.address?.road || data.address?.pedestrian || data.address?.suburb || data.display_name?.split(',')[0];
-              if (calle) {
-                setRequestForm(prev => ({ ...prev, direccion: calle }));
-              }
-            })
-            .catch(err => console.error("Error geocodificando GPS:", err));
-        },
-        () => {
-          toast.error('No se pudo obtener la ubicación. Verifique los permisos.');
-        }
-      );
+    if (!window.isSecureContext) {
+      toast.error("Para activar el GPS en dispositivos móviles, ingresa usando HTTPS.");
+      return;
     }
+    if (!navigator.geolocation) {
+      toast.error("Tu navegador no soporta geolocalización.");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const latlng = L.latLng(latitude, longitude);
+        setSelectedPosition(latlng);
+        setMapCenter(latlng);
+        if (mapRef.current) {
+          mapRef.current.flyTo(latlng, 16, { duration: 1.5 });
+        }
+        toast.success("Ubicación actual detectada.");
+
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&accept-language=es`)
+          .then(res => res.json())
+          .then(data => {
+            const calle = data.address?.road || data.address?.pedestrian || data.address?.suburb || data.display_name?.split(',')[0];
+            if (calle) {
+              setRequestForm(prev => ({ ...prev, direccion: calle }));
+            }
+          })
+          .catch(err => console.error("Error geocodificando GPS:", err));
+      },
+      (err) => {
+        if (err.code === 1) {
+          toast.error("Ubicación bloqueada. Toca 'aA' en la barra de Safari > Ajustes del sitio web > Ubicación: Permitir.");
+        } else {
+          toast.error("No se pudo obtener la señal GPS.");
+        }
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 10000,
+        maximumAge: 60000
+      }
+    );
   };
   const [dictadoState, setDictadoState] = useState<'inactivo' | 'escuchando' | 'analizando'>('inactivo');
   const dictadoStateRef = useRef<'inactivo' | 'escuchando' | 'analizando'>('inactivo');
@@ -302,7 +323,7 @@ export const DashboardCliente = () => {
     updateDictadoState('analizando');
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.post('http://localhost:3001/api/ai/intent', { prompt: texto, userRole: 'CLIENTE' }, {
+      const res = await axios.post('/api/ai/intent', { prompt: texto, userRole: 'CLIENTE' }, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.data) {
@@ -409,6 +430,12 @@ export const DashboardCliente = () => {
   const toggleListen = () => {
     if (dictadoState === 'analizando') return;
 
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.error("Para usar comandos de voz en el móvil, accede mediante HTTPS y acepta los permisos de micrófono.");
+      return;
+    }
+
     if (dictadoState === 'escuchando') {
       if (voiceTimeoutRef.current) clearTimeout(voiceTimeoutRef.current);
       try {
@@ -432,7 +459,7 @@ export const DashboardCliente = () => {
           updateDictadoState('inactivo');
         }
       } else {
-        toast.error("Tu navegador no soporta reconocimiento de voz.");
+        toast.error("Para usar comandos de voz en el móvil, accede mediante HTTPS y acepta los permisos de micrófono.");
       }
     }
   };
@@ -448,7 +475,7 @@ export const DashboardCliente = () => {
     setRequestStatus('searching');
     try {
       const token = localStorage.getItem('token');
-      await axios.post('http://localhost:3001/api/solicitudes', {
+      await axios.post('/api/solicitudes', {
         tipo_servicio: selectedCategory,
         descripcion: requestForm.descripcion,
         presupuesto: parseFloat(requestForm.presupuesto) || null,
@@ -490,26 +517,37 @@ export const DashboardCliente = () => {
       case 'mapa':
         return (
           <div className="flex-1 flex flex-col sm:flex-row overflow-hidden relative">
-            {/* Panel Lateral Buscador */}
-            <div className="w-full sm:w-96 bg-surface border-r border-slate-700 p-6 flex flex-col z-20 shadow-2xl relative">
-              <h2 className="text-2xl font-bold text-white mb-6">¿Qué necesitas hoy?</h2>
+            {/* Panel Buscador: en móvil tarjeta flotante compacta arriba, en desktop panel lateral w-96 */}
+            <div className="absolute top-3 left-3 right-3 z-20 bg-surface/95 backdrop-blur-md p-3.5 rounded-2xl border border-slate-700 shadow-xl sm:relative sm:inset-auto sm:w-96 sm:max-h-none sm:p-6 sm:rounded-none sm:border-r sm:border-t-0 sm:border-l-0 sm:border-b-0 sm:bg-surface sm:shadow-2xl sm:flex sm:flex-col sm:shrink-0 sm:overflow-y-auto">
+              <div className="flex items-center justify-between mb-2 sm:mb-6">
+                <h2 className="text-base sm:text-2xl font-bold text-white">¿Qué necesitas hoy?</h2>
+                <button
+                  type="button"
+                  onClick={() => setShowMobileSuggestedDrawer(true)}
+                  className="sm:hidden flex items-center gap-1.5 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/40 px-2.5 py-1 rounded-xl text-xs font-semibold shadow-sm transition-all"
+                  title="Ver técnicos sugeridos"
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  <span>Sugeridos ({tecnicosSugeridos.length})</span>
+                </button>
+              </div>
               
-              <div className="relative mb-4">
-                <Search className="absolute left-3 top-3.5 h-5 w-5 text-textSecondary" />
+              <div className="relative mb-2 sm:mb-4">
+                <Search className="absolute left-3 top-2.5 sm:top-3.5 h-4 w-4 sm:h-5 sm:w-5 text-textSecondary" />
                 <input 
                   type="text" 
                   placeholder="Ej. Plomero, Electricista..."
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:border-primary transition-colors"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2 sm:py-3 pl-9 sm:pl-10 pr-4 text-sm sm:text-base text-white focus:outline-none focus:border-primary transition-colors"
                   value={requestForm.descripcion}
                   onChange={(e) => setRequestForm({...requestForm, descripcion: e.target.value})}
                 />
               </div>
 
-              <div className="mb-6 flex gap-2">
+              <div className="mb-0 sm:mb-6 flex gap-2">
                 <button
                   onClick={toggleListen}
                   disabled={dictadoState === 'analizando'}
-                  className={`flex-1 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-all ${
+                  className={`flex-1 py-2 sm:py-3 rounded-xl font-medium text-xs sm:text-sm flex items-center justify-center gap-2 transition-all ${
                     dictadoState === 'escuchando'
                       ? 'bg-red-500/20 text-red-400 border border-red-500/50 animate-pulse ring-2 ring-red-500/20'
                       : dictadoState === 'analizando'
@@ -520,24 +558,24 @@ export const DashboardCliente = () => {
                   {dictadoState === 'escuchando' ? (
                     <>
                       <span className="h-2 w-2 rounded-full bg-red-500 animate-ping" />
-                      <Mic className="h-5 w-5 text-red-400" />
+                      <Mic className="h-4 w-4 sm:h-5 sm:w-5 text-red-400" />
                       <span>Escuchando...</span>
                     </>
                   ) : dictadoState === 'analizando' ? (
                     <>
-                      <Loader2 className="h-5 w-5 animate-spin text-indigo-300" />
+                      <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin text-indigo-300" />
                       <span>Analizando...</span>
                     </>
                   ) : (
                     <>
-                      <Mic className="h-5 w-5" />
+                      <Mic className="h-4 w-4 sm:h-5 sm:w-5" />
                       <span>Dictar Solicitud</span>
                     </>
                   )}
                 </button>
               </div>
 
-              <div className="space-y-3 flex-1 overflow-y-auto pr-2 custom-scrollbar">
+              <div className="hidden sm:block space-y-3 flex-1 overflow-y-auto pr-2 custom-scrollbar">
                 <h3 className="text-sm font-bold text-textSecondary uppercase tracking-wider mb-2">Técnicos Sugeridos en tu Zona (Top {tecnicosSugeridos.length})</h3>
                 {tecnicosSugeridos.length > 0 ? tecnicosSugeridos.map((tech, i) => (
                   <div 
@@ -547,8 +585,20 @@ export const DashboardCliente = () => {
                     onMouseLeave={() => setHoveredTecnico(null)}
                   >
                     <div className="flex items-center gap-4 relative z-10">
-                      <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold overflow-hidden">
-                        {tech.foto_url ? <img src={tech.foto_url} alt="avatar" className="w-full h-full object-cover" /> : tech.nombres.charAt(0)}
+                      <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold overflow-hidden relative">
+                        <span className="absolute inset-0 flex items-center justify-center">
+                          {tech.nombres.charAt(0)}
+                        </span>
+                        {tech.foto_url && (
+                          <img 
+                            src={tech.foto_url.startsWith('http') || tech.foto_url.startsWith('/') ? tech.foto_url : `/uploads/${tech.foto_url}`} 
+                            alt="avatar" 
+                            className="w-full h-full object-cover relative z-10" 
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }} 
+                          />
+                        )}
                       </div>
                       <div className="flex-1">
                         <h3 className="text-white font-medium">{tech.nombres} {tech.apellidos}</h3>
@@ -580,8 +630,8 @@ export const DashboardCliente = () => {
               </div>
             </div>
 
-            {/* Área del Mapa Real Leaflet */}
-            <div className="flex-1 bg-[#1a202c] relative overflow-hidden flex flex-col items-center justify-center z-10">
+            {/* Área del Mapa Real Leaflet: en móvil full-screen ocupando el fondo, en desktop flex-1 al lado del panel */}
+            <div className="absolute inset-0 z-0 h-full w-full sm:relative sm:inset-auto sm:flex-1 sm:h-full bg-[#1a202c] overflow-hidden flex flex-col items-center justify-center sm:z-10">
               <MapContainer 
                 center={mapCenter as L.LatLngExpression} 
                 zoom={14} 
@@ -610,15 +660,15 @@ export const DashboardCliente = () => {
 
               <button 
                 onClick={handleGetLocation}
-                className="absolute bottom-8 right-8 z-20 bg-primary hover:bg-indigo-600 text-white rounded-full p-4 shadow-[0_0_20px_rgba(79,70,229,0.4)] transition-all hover:scale-110 flex items-center justify-center"
+                className="absolute bottom-20 right-4 sm:bottom-8 sm:right-8 z-20 bg-primary hover:bg-indigo-600 text-white rounded-full p-3.5 sm:p-4 shadow-[0_0_20px_rgba(79,70,229,0.4)] transition-all hover:scale-110 flex items-center justify-center"
                 title="Mi Ubicación Actual"
               >
-                <MapPin className="h-6 w-6" />
+                <MapPin className="h-5 w-5 sm:h-6 sm:w-6" />
               </button>
 
               {/* Marcadores Simulados de Técnicos (solo UI por encima) */}
               {!selectedCategory && !selectedTechnician && (
-                <div className="absolute z-20 top-8 text-center bg-surface/90 backdrop-blur-md px-8 py-5 rounded-3xl border border-slate-700 shadow-2xl pointer-events-none">
+                <div className="hidden sm:block absolute z-20 top-8 text-center bg-surface/90 backdrop-blur-md px-8 py-5 rounded-3xl border border-slate-700 shadow-2xl pointer-events-none">
                   <h3 className="text-2xl font-medium text-white mb-2">Cochabamba y Alrededores</h3>
                   <p className="text-textSecondary max-w-sm mx-auto">
                     Busca lo que necesitas, dicta tu problema o explora los técnicos sugeridos en tu zona.
@@ -637,8 +687,20 @@ export const DashboardCliente = () => {
                   </div>
 
                   <div className="flex items-center gap-4 mb-6">
-                    <div className={`h-16 w-16 rounded-full bg-${selectedTechnician.color}-500/20 border border-${selectedTechnician.color}-500 flex items-center justify-center`}>
-                      <UserCircle className={`h-10 w-10 text-${selectedTechnician.color}-400`} />
+                    <div className={`h-16 w-16 rounded-full bg-${selectedTechnician.color}-500/20 border border-${selectedTechnician.color}-500 flex items-center justify-center overflow-hidden relative`}>
+                      <span className="absolute inset-0 flex items-center justify-center">
+                        <UserCircle className={`h-10 w-10 text-${selectedTechnician.color}-400`} />
+                      </span>
+                      {selectedTechnician.foto_url && (
+                        <img 
+                          src={selectedTechnician.foto_url.startsWith('http') || selectedTechnician.foto_url.startsWith('/') ? selectedTechnician.foto_url : `/uploads/${selectedTechnician.foto_url}`} 
+                          alt="avatar" 
+                          className="w-full h-full object-cover relative z-10" 
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }} 
+                        />
+                      )}
                     </div>
                     <div>
                       <h4 className="text-xl font-bold text-white">{selectedTechnician.name}</h4>
@@ -688,13 +750,13 @@ export const DashboardCliente = () => {
                 </div>
               )}
 
-              {/* FAB Nueva Solicitud */}
+              {/* FAB Nueva Solicitud: en móvil accesible al pulgar en bottom-6 right-4 */}
               {showNewRequestForm === 'hidden' && (
                 <button 
                   onClick={() => setShowNewRequestForm('expanded')}
-                  className="absolute bottom-24 right-8 z-20 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full px-6 py-4 shadow-[0_0_20px_rgba(16,185,129,0.4)] transition-all hover:scale-105 flex items-center justify-center gap-2 font-bold text-lg"
+                  className="absolute bottom-6 right-4 sm:bottom-24 sm:right-8 z-20 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full px-4 py-3 sm:px-6 sm:py-4 shadow-[0_0_20px_rgba(16,185,129,0.4)] transition-all hover:scale-105 flex items-center justify-center gap-2 font-bold text-sm sm:text-lg"
                 >
-                  <Send className="h-5 w-5" /> + Nueva Solicitud
+                  <Send className="h-4 w-4 sm:h-5 sm:w-5" /> + Nueva Solicitud
                 </button>
               )}
 
@@ -702,16 +764,16 @@ export const DashboardCliente = () => {
               {showNewRequestForm === 'minimized' && (
                 <button 
                   onClick={() => setShowNewRequestForm('expanded')}
-                  className="absolute bottom-24 right-8 z-20 bg-surface border border-primary/50 text-white rounded-full px-6 py-3 shadow-2xl transition-all hover:scale-105 flex items-center justify-center gap-3 font-medium"
+                  className="absolute bottom-6 right-4 sm:bottom-24 sm:right-8 z-20 bg-surface border border-primary/50 text-white rounded-full px-4 py-2.5 sm:px-6 sm:py-3 shadow-2xl transition-all hover:scale-105 flex items-center justify-center gap-2.5 sm:gap-3 text-xs sm:text-sm font-medium"
                 >
                   <div className="h-2 w-2 rounded-full bg-primary animate-pulse"></div>
                   Continuar Solicitud...
                 </button>
               )}
 
-              {/* Flujo de Solicitud (Formulario Flotante) */}
+              {/* Flujo de Solicitud (Formulario Flotante: estilo bottom-sheet en móvil con scroll interno) */}
               {showNewRequestForm === 'expanded' && requestStatus === 'idle' && (
-                <div className="absolute z-30 bottom-4 right-4 sm:bottom-auto sm:right-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-[calc(100%-2rem)] sm:w-full max-w-md bg-surface/95 backdrop-blur-xl border border-primary/30 rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-300">
+                <div className="absolute z-30 bottom-0 left-0 right-0 rounded-t-3xl sm:rounded-3xl sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full sm:max-w-md bg-surface/95 backdrop-blur-xl border border-primary/30 p-6 pb-8 sm:pb-6 shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-300">
                   <div className="flex justify-between items-center mb-6">
                     <h3 className="text-xl font-bold text-white">Nueva Solicitud</h3>
                     <div className="flex items-center gap-2">
@@ -936,8 +998,20 @@ export const DashboardCliente = () => {
                           ofertasActuales.map((oferta: any) => (
                             <div key={oferta.id_oferta} className="bg-surface p-4 rounded-xl border border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
                               <div className="flex items-center gap-3">
-                                <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
-                                  {oferta.nombres.charAt(0)}
+                                <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold relative overflow-hidden">
+                                  <span className="absolute inset-0 flex items-center justify-center">
+                                    {oferta.nombres?.charAt(0) || 'P'}
+                                  </span>
+                                  {oferta.foto_url && (
+                                    <img 
+                                      src={oferta.foto_url.startsWith('http') || oferta.foto_url.startsWith('/') ? oferta.foto_url : `/uploads/${oferta.foto_url}`} 
+                                      alt="avatar" 
+                                      className="w-full h-full object-cover relative z-10" 
+                                      onError={(e) => {
+                                        (e.target as HTMLElement).style.display = 'none';
+                                      }} 
+                                    />
+                                  )}
                                 </div>
                                 <div>
                                   <p className="text-white font-medium text-sm">{oferta.nombres} {oferta.apellidos}</p>
@@ -1045,8 +1119,20 @@ export const DashboardCliente = () => {
                 verificados.map((tech: any) => (
                   <div key={tech.id_prestador} className="glass-panel p-5 rounded-2xl border border-slate-700 hover:border-primary/50 transition-colors flex flex-col">
                     <div className="flex items-center gap-4 mb-4">
-                      <div className="h-16 w-16 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xl">
-                        {tech.foto_url ? <img src={tech.foto_url} alt="avatar" className="h-full w-full rounded-full object-cover" /> : tech.nombres.charAt(0)}
+                      <div className="h-16 w-16 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xl relative overflow-hidden">
+                        <span className="absolute inset-0 flex items-center justify-center">
+                          {tech.nombres.charAt(0)}
+                        </span>
+                        {tech.foto_url && (
+                          <img 
+                            src={tech.foto_url.startsWith('http') || tech.foto_url.startsWith('/') ? tech.foto_url : `/uploads/${tech.foto_url}`} 
+                            alt="avatar" 
+                            className="h-full w-full rounded-full object-cover relative z-10" 
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }} 
+                          />
+                        )}
                       </div>
                       <div>
                         <h3 className="text-white font-bold">{tech.nombres} {tech.apellidos}</h3>
@@ -1147,11 +1233,19 @@ export const DashboardCliente = () => {
           )}
 
           <button onClick={() => setShowDropdown(!showDropdown)} className="focus:outline-none">
-              <div className="h-10 w-10 rounded-full bg-accent text-white flex items-center justify-center font-bold shadow-lg overflow-hidden border-2 border-indigo-500">
-                {user?.foto_url ? (
-                  <img src={user.foto_url} alt="Avatar" className="w-full h-full object-cover" />
-                ) : (
-                  user?.nombres?.charAt(0) || 'C'
+              <div className="h-10 w-10 rounded-full bg-accent text-white flex items-center justify-center font-bold shadow-lg overflow-hidden border-2 border-indigo-500 relative">
+                <span className="absolute inset-0 flex items-center justify-center">
+                  {user?.nombres?.charAt(0) || 'C'}
+                </span>
+                {user?.foto_url && (
+                  <img 
+                    src={user.foto_url.startsWith('http') || user.foto_url.startsWith('/') ? user.foto_url : `/uploads/${user.foto_url}`} 
+                    alt="Avatar" 
+                    className="w-full h-full object-cover relative z-10" 
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }} 
+                  />
                 )}
               </div>
           </button>
@@ -1237,6 +1331,115 @@ export const DashboardCliente = () => {
                 <Star className="h-5 w-5 fill-white" /> Enviar Calificación
               </button>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Drawer Móvil de Técnicos Sugeridos */}
+      {showMobileSuggestedDrawer && (
+        <div className="fixed inset-0 z-50 sm:hidden flex">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+            onClick={() => setShowMobileSuggestedDrawer(false)}
+          />
+          
+          {/* Drawer content */}
+          <div className="relative w-80 max-w-[85vw] bg-surface/98 backdrop-blur-md h-full z-10 p-4 shadow-2xl border-r border-slate-700 flex flex-col animate-in slide-in-from-left duration-300">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-700/60 mb-3">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary" />
+                <h3 className="font-bold text-white text-base">Técnicos Sugeridos</h3>
+              </div>
+              <button 
+                onClick={() => setShowMobileSuggestedDrawer(false)}
+                className="text-textSecondary hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-textSecondary mb-3">
+              Profesionales verificados disponibles en tu zona ({tecnicosSugeridos.length}):
+            </p>
+
+            <div className="space-y-3 flex-1 overflow-y-auto pr-1 custom-scrollbar">
+              {tecnicosSugeridos.length > 0 ? (
+                tecnicosSugeridos.map((tech: any, i: number) => (
+                  <div 
+                    key={i} 
+                    className="bg-slate-800/60 border border-slate-700 rounded-xl p-3.5 transition-all space-y-2.5"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-11 w-11 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold overflow-hidden relative shrink-0">
+                        <span className="absolute inset-0 flex items-center justify-center">
+                          {tech.nombres.charAt(0)}
+                        </span>
+                        {tech.foto_url && (
+                          <img 
+                            src={tech.foto_url.startsWith('http') || tech.foto_url.startsWith('/') ? tech.foto_url : `/uploads/${tech.foto_url}`} 
+                            alt="avatar" 
+                            className="w-full h-full object-cover relative z-10" 
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }} 
+                          />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-white font-medium text-sm truncate">{tech.nombres} {tech.apellidos}</h4>
+                        <p className="text-primary text-xs truncate">{tech.especialidad}</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {parseFloat(tech.calificacion_promedio || '0') > 0 ? (
+                            <div className="flex items-center gap-1">
+                              <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
+                              <span className="text-amber-400 text-xs font-semibold">{parseFloat(tech.calificacion_promedio || '0').toFixed(1)}</span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] bg-slate-700/60 text-slate-300 px-1.5 py-0.5 rounded-full border border-slate-600/50">
+                              Nuevo talento
+                            </span>
+                          )}
+                          <span className="text-[10px] text-textSecondary">• {tech.macrodistrito}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 pt-1 border-t border-slate-700/50">
+                      {tech.lat_cobertura && tech.lng_cobertura && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHoveredTecnico(tech);
+                            if (mapRef.current) {
+                              mapRef.current.flyTo([tech.lat_cobertura, tech.lng_cobertura], 14);
+                            }
+                            setShowMobileSuggestedDrawer(false);
+                            toast.success(`Cobertura de ${tech.nombres} centrada en el mapa`);
+                          }}
+                          className="flex-1 py-1.5 px-2 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 border border-indigo-500/40 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-colors"
+                        >
+                          <MapPin className="h-3.5 w-3.5 text-indigo-400" /> Cobertura
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedTechnicianModalId(tech.id_prestador);
+                          setShowMobileSuggestedDrawer(false);
+                        }}
+                        className="flex-1 py-1.5 px-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-colors"
+                      >
+                        <UserCircle className="h-3.5 w-3.5 text-slate-300" /> Ver Perfil
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-textSecondary text-center py-6">
+                  No hay técnicos sugeridos en tu zona actual.
+                </p>
+              )}
+            </div>
           </div>
         </div>
       )}

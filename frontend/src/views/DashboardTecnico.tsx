@@ -221,6 +221,39 @@ export const DashboardTecnico = () => {
     map.setView(center, 15);
     return null;
   };
+
+  const handleGetLocation = () => {
+    if (!window.isSecureContext) {
+      toast.error("Para activar el GPS en dispositivos móviles, ingresa usando HTTPS.");
+      return;
+    }
+    if (!navigator.geolocation) {
+      toast.error("Tu navegador no soporta geolocalización.");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const latlng: [number, number] = [latitude, longitude];
+        setMapCenter(latlng);
+        toast.success("Ubicación actual detectada.");
+      },
+      (err) => {
+        if (err.code === 1) {
+          toast.error("Ubicación bloqueada. Toca 'aA' en la barra de Safari > Ajustes del sitio web > Ubicación: Permitir.");
+        } else {
+          toast.error("No se pudo obtener la señal GPS.");
+        }
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 10000,
+        maximumAge: 60000
+      }
+    );
+  };
+
   const [recotizarForm, setRecotizarForm] = useState<{ofertaId: number | null, monto: string, mensaje: string}>({ofertaId: null, monto: '', mensaje: ''});
 
   const [hasUnseenUpdates, setHasUnseenUpdates] = useState(false);
@@ -241,7 +274,7 @@ export const DashboardTecnico = () => {
 
   const fetchMisCotizaciones = async () => {
     try {
-      const res = await axios.get('http://localhost:3001/api/ofertas/me', {
+      const res = await axios.get('/api/ofertas/me', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setMisCotizaciones(res.data);
@@ -256,7 +289,7 @@ export const DashboardTecnico = () => {
 
   const fetchPrestadorProfile = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/prestadores/me', {
+      const res = await fetch('/api/prestadores/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -270,7 +303,7 @@ export const DashboardTecnico = () => {
 
   const fetchSaldo = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/monedero/saldo', {
+      const res = await fetch('/api/monedero/saldo', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -288,7 +321,7 @@ export const DashboardTecnico = () => {
     }
     setLoadingFeed(true);
     try {
-      const res = await fetch('http://localhost:3001/api/solicitudes/feed', {
+      const res = await fetch('/api/solicitudes/feed', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -304,7 +337,7 @@ export const DashboardTecnico = () => {
   const fetchResenas = async () => {
     if (!(user?.prestador as any)?.id_prestador) return;
     try {
-      const res = await fetch(`http://localhost:3001/api/prestadores/${(user?.prestador as any).id_prestador}/resenas`, {
+      const res = await fetch(`/api/prestadores/${(user?.prestador as any).id_prestador}/resenas`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -342,7 +375,7 @@ export const DashboardTecnico = () => {
     setRechargeStep(3); // Spinner step
     setTimeout(async () => {
       try {
-        const res = await fetch('http://localhost:3001/api/monedero/recargar', {
+        const res = await fetch('/api/monedero/recargar', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -404,7 +437,7 @@ export const DashboardTecnico = () => {
       formData.append('tipo_documento', 'CERTIFICADO_TECNICO'); // Default for now
 
       try {
-        await fetch('http://localhost:3001/api/prestador/credenciales', {
+        await fetch('/api/prestador/credenciales', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}` },
           body: formData
@@ -430,7 +463,7 @@ export const DashboardTecnico = () => {
     }
     if (!solicitudSeleccionada) return;
     try {
-      const res = await fetch('http://localhost:3001/api/ofertas', {
+      const res = await fetch('/api/ofertas', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -466,7 +499,7 @@ export const DashboardTecnico = () => {
       return;
     }
     try {
-      const res = await axios.post('http://localhost:3001/api/vinculaciones/aceptar', {
+      const res = await axios.post('/api/vinculaciones/aceptar', {
         id_solicitud,
         id_prestador: prestadorProfile?.id_prestador,
         monto_ofertado
@@ -493,7 +526,7 @@ export const DashboardTecnico = () => {
       return;
     }
     try {
-      await axios.put(`http://localhost:3001/api/ofertas/${id_oferta}/recotizar`, {
+      await axios.put(`/api/ofertas/${id_oferta}/recotizar`, {
         monto_ofertado: recotizarForm.monto,
         mensaje_propuesta: recotizarForm.mensaje
       }, { headers: { Authorization: `Bearer ${token}` }});
@@ -548,11 +581,19 @@ export const DashboardTecnico = () => {
           )}
 
           <button onClick={() => setShowDropdown(!showDropdown)} className="focus:outline-none">
-            <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-accent to-primary flex items-center justify-center text-white font-bold shadow-lg overflow-hidden border-2 border-indigo-500">
-              {user?.foto_url ? (
-                <img src={user.foto_url} alt="Avatar" className="w-full h-full object-cover" />
-              ) : (
-                user?.nombres?.charAt(0) || 'T'
+            <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-accent to-primary flex items-center justify-center text-white font-bold shadow-lg overflow-hidden border-2 border-indigo-500 relative">
+              <span className="absolute inset-0 flex items-center justify-center">
+                {user?.nombres?.charAt(0) || 'T'}
+              </span>
+              {user?.foto_url && (
+                <img 
+                  src={user.foto_url.startsWith('http') || user.foto_url.startsWith('/') ? user.foto_url : `/uploads/${user.foto_url}`} 
+                  alt="Avatar" 
+                  className="w-full h-full object-cover relative z-10" 
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }} 
+                />
               )}
             </div>
           </button>
@@ -842,11 +883,31 @@ export const DashboardTecnico = () => {
                     ))}
                   </MapContainer>
                 </div>
+                {targetMarker && (
+                  <div className="absolute top-4 left-4 z-[400]">
+                    <button 
+                      onClick={() => {
+                        setTargetMarker(null);
+                        setActiveTab('cotizaciones');
+                      }}
+                      className="bg-slate-900/90 hover:bg-slate-800 text-white border border-slate-700 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-2xl backdrop-blur-md transition-all hover:scale-105"
+                    >
+                      ← Volver a Mis Cotizaciones
+                    </button>
+                  </div>
+                )}
                 <div className="relative z-10 pointer-events-none flex justify-between items-start">
-                  <h2 className="text-xl font-bold bg-surface/80 backdrop-blur-md px-4 py-2 rounded-xl text-white pointer-events-auto shadow-lg border border-slate-700/50">
-                    Mapa de Demanda
+                  <h2 className={`text-xl font-bold bg-surface/80 backdrop-blur-md px-4 py-2 rounded-xl text-white pointer-events-auto shadow-lg border border-slate-700/50 ${targetMarker ? 'ml-auto' : ''}`}>
+                    {targetMarker ? 'Ubicación del Servicio' : 'Mapa de Demanda'}
                   </h2>
                 </div>
+                <button 
+                  onClick={handleGetLocation}
+                  className="absolute bottom-4 right-4 z-[400] bg-primary hover:bg-indigo-600 text-white rounded-full p-3 shadow-[0_0_20px_rgba(79,70,229,0.4)] transition-all hover:scale-110 flex items-center justify-center pointer-events-auto"
+                  title="Mi Ubicación Actual"
+                >
+                  <MapPin className="h-5 w-5" />
+                </button>
               </div>
 
               <div className="glass-panel rounded-2xl p-6 flex flex-col">
