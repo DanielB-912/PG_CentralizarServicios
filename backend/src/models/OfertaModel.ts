@@ -7,7 +7,7 @@ export interface Oferta {
   id_prestador: number;
   monto_ofertado: number;
   mensaje_propuesta?: string;
-  estado_oferta?: 'ENVIADA' | 'RECHAZADA' | 'ACEPTADA' | 'CONTRAOFERTADA';
+  estado_oferta?: 'ENVIADA' | 'RECHAZADA' | 'ACEPTADA' | 'CONTRAOFERTADA' | 'NO_SELECCIONADA' | 'PENDIENTE';
   fecha_oferta?: Date;
 }
 
@@ -47,7 +47,7 @@ export class OfertaModel {
     return null;
   }
 
-  static async updateEstado(id_oferta: number, estado_oferta: 'ENVIADA' | 'RECHAZADA' | 'ACEPTADA' | 'CONTRAOFERTADA'): Promise<void> {
+  static async updateEstado(id_oferta: number, estado_oferta: 'ENVIADA' | 'RECHAZADA' | 'ACEPTADA' | 'CONTRAOFERTADA' | 'NO_SELECCIONADA' | 'PENDIENTE'): Promise<void> {
     await pool.execute(
       `UPDATE ofertas SET estado_oferta = ? WHERE id_oferta = ?`,
       [estado_oferta, id_oferta]

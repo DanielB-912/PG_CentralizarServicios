@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS ofertas (
    id_prestador INT NOT NULL,
    monto_ofertado DECIMAL(10,2) NOT NULL,
    mensaje_propuesta TEXT NULL,
-   estado_oferta ENUM('ENVIADA', 'RECHAZADA', 'ACEPTADA', 'CONTRAOFERTADA') DEFAULT 'ENVIADA',
+   estado_oferta ENUM('ENVIADA', 'RECHAZADA', 'ACEPTADA', 'CONTRAOFERTADA', 'NO_SELECCIONADA', 'PENDIENTE') DEFAULT 'ENVIADA',
    fecha_oferta TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
    FOREIGN KEY (id_solicitud) REFERENCES solicitudes(id_solicitud) ON DELETE CASCADE,
    FOREIGN KEY (id_prestador) REFERENCES prestadores(id_prestador)

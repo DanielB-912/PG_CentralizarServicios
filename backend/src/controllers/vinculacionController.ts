@@ -6,8 +6,13 @@ import { PrestadorModel } from '../models/PrestadorModel';
 export class VinculacionController {
   static async aceptarOferta(req: Request, res: Response) {
     try {
-      const { id_solicitud, id_prestador, monto_ofertado } = req.body;
-      const result = await VinculacionService.aceptarOferta(id_solicitud, id_prestador, monto_ofertado);
+      const { id_solicitud, id_prestador, monto_ofertado, id_oferta } = req.body;
+      const result = await VinculacionService.aceptarOferta(
+        Number(id_solicitud), 
+        Number(id_prestador), 
+        Number(monto_ofertado),
+        id_oferta ? Number(id_oferta) : undefined
+      );
       res.json({ 
         success: true, 
         message: 'Vinculación exitosa', 

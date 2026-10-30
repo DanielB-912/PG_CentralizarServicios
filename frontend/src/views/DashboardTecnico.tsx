@@ -258,6 +258,26 @@ export const DashboardTecnico = () => {
 
   const [hasUnseenUpdates, setHasUnseenUpdates] = useState(false);
 
+  const getSeenOfferStates = (): Record<number, string> => {
+    try {
+      return JSON.parse(localStorage.getItem('tecnico_seen_ofertas') || '{}');
+    } catch {
+      return {};
+    }
+  };
+
+  const markOffersAsSeen = (offers: any[]) => {
+    try {
+      const seenMap = getSeenOfferStates();
+      offers.forEach((o: any) => {
+        seenMap[o.id_oferta] = o.estado_oferta;
+      });
+      localStorage.setItem('tecnico_seen_ofertas', JSON.stringify(seenMap));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
     fetchSaldo();
     fetchFeed();
@@ -268,6 +288,7 @@ export const DashboardTecnico = () => {
   useEffect(() => {
     if (activeTab === 'cotizaciones') {
       fetchMisCotizaciones();
+      markOffersAsSeen(misCotizaciones);
       setHasUnseenUpdates(false);
     }
   }, [activeTab]);
@@ -278,9 +299,19 @@ export const DashboardTecnico = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
       setMisCotizaciones(res.data);
-      if (activeTab !== 'cotizaciones') {
-        const unseen = res.data.some((c: any) => c.estado_oferta === 'CONTRAOFERTADA' || c.estado_oferta === 'ACEPTADA');
-        setHasUnseenUpdates(unseen);
+      if (activeTab === 'cotizaciones') {
+        markOffersAsSeen(res.data);
+        setHasUnseenUpdates(false);
+      } else {
+        const seenMap = getSeenOfferStates();
+        const hasUnseen = res.data.some((c: any) => {
+          const prevState = seenMap[c.id_oferta];
+          if (!prevState) {
+            return ['NO_SELECCIONADA', 'ACEPTADA', 'CONTRAOFERTADA'].includes(c.estado_oferta);
+          }
+          return prevState !== c.estado_oferta && ['NO_SELECCIONADA', 'ACEPTADA', 'CONTRAOFERTADA'].includes(c.estado_oferta);
+        });
+        setHasUnseenUpdates(hasUnseen);
       }
     } catch (err) {
       console.error(err);
@@ -461,6 +492,10 @@ export const DashboardTecnico = () => {
       toast.error('Cuenta suspendida temporalmente por la administración. No puedes enviar cotizaciones.');
       return;
     }
+    if (!ofertaMonto || isNaN(Number(ofertaMonto)) || Number(ofertaMonto) <= 0) {
+      toast.error("Por favor, ingresa un monto válido en Bolivianos para enviar la cotización.");
+      return;
+    }
     if (!solicitudSeleccionada) return;
     try {
       const res = await fetch('/api/ofertas', {
@@ -493,7 +528,7 @@ export const DashboardTecnico = () => {
     }
   };
 
-  const handleAceptarContraoferta = async (id_solicitud: number, monto_ofertado: number) => {
+  const handleAceptarContraoferta = async (id_solicitud: number, monto_ofertado: number, id_oferta?: number) => {
     if (isSuspended) {
       toast.error('Cuenta suspendida temporalmente por la administración.');
       return;
@@ -502,7 +537,8 @@ export const DashboardTecnico = () => {
       const res = await axios.post('/api/vinculaciones/aceptar', {
         id_solicitud,
         id_prestador: prestadorProfile?.id_prestador,
-        monto_ofertado
+        monto_ofertado,
+        id_oferta
       }, { headers: { Authorization: `Bearer ${token}` }});
       if (res.data.success) {
         toast.success(`¡Vinculación concretada! Contacta al cliente al teléfono: +591 ${res.data.cliente_telefono}. Coordina la visita técnica.`, { duration: 8000 });
@@ -521,8 +557,8 @@ export const DashboardTecnico = () => {
       toast.error('Cuenta suspendida temporalmente por la administración.');
       return;
     }
-    if (!recotizarForm.monto) {
-      toast.error('Ingresa un monto válido');
+    if (!recotizarForm.monto || isNaN(Number(recotizarForm.monto)) || Number(recotizarForm.monto) <= 0) {
+      toast.error("Por favor, ingresa un monto válido en Bolivianos para enviar la cotización.");
       return;
     }
     try {
@@ -817,7 +853,11 @@ export const DashboardTecnico = () => {
                     <MapPin className="h-4 w-4" /> Mapa de Demandas
                   </button>
                   <button 
-                    onClick={() => setActiveTab('cotizaciones')}
+                    onClick={() => {
+                      setActiveTab('cotizaciones');
+                      markOffersAsSeen(misCotizaciones);
+                      setHasUnseenUpdates(false);
+                    }}
                     className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 relative ${activeTab === 'cotizaciones' ? 'bg-primary text-white shadow-lg' : 'text-textSecondary hover:text-white'}`}
                   >
                     <ListTodo className="h-4 w-4" /> Mis Cotizaciones
@@ -968,7 +1008,11 @@ export const DashboardTecnico = () => {
                                 onChange={(e) => setOfertaMonto(e.target.value)} 
                                 className="w-full bg-slate-800 text-white rounded-lg p-2 border border-slate-700 focus:border-indigo-500 outline-none"
                               />
-                              <button type="submit" className="btn-primary px-6 flex items-center gap-2">
+                              <button 
+                                type="submit" 
+                                disabled={!ofertaMonto || isNaN(Number(ofertaMonto)) || Number(ofertaMonto) <= 0}
+                                className="btn-primary px-6 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
                                 <Send className="h-4 w-4" /> Enviar
                               </button>
                             </div>
@@ -1021,11 +1065,19 @@ export const DashboardTecnico = () => {
                               cotizacion.estado_oferta === 'ACEPTADA' ? 'bg-emerald-500/20 text-emerald-400' :
                               cotizacion.estado_oferta === 'RECHAZADA' ? 'bg-red-500/20 text-red-400' :
                               cotizacion.estado_oferta === 'CONTRAOFERTADA' ? 'bg-amber-500/20 text-amber-400' :
+                              cotizacion.estado_oferta === 'NO_SELECCIONADA' ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30' :
                               'bg-blue-500/20 text-blue-400'
                             }`}>
-                              {cotizacion.estado_oferta}
+                              {cotizacion.estado_oferta === 'NO_SELECCIONADA' ? 'TRABAJO ASIGNADO A OTRO PRESTADOR' : cotizacion.estado_oferta}
                             </span>
                           </div>
+
+                          {cotizacion.estado_oferta === 'NO_SELECCIONADA' && (
+                            <div className="my-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200/90 flex items-center gap-2">
+                              <span className="text-amber-400 font-bold">ℹ️</span>
+                              <span>El cliente seleccionó otra propuesta para esta solicitud.</span>
+                            </div>
+                          )}
                           {cotizacion.estado_oferta === 'ACEPTADA' && (
                             <div className="mt-4 p-4 rounded-xl border-2 border-emerald-500/50 bg-emerald-900/10 flex flex-col gap-3 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
                               <div className="flex items-center gap-2 text-emerald-400 font-bold">
@@ -1103,7 +1155,7 @@ export const DashboardTecnico = () => {
                                   Re-cotizar
                                 </button>
                                 <button
-                                  onClick={() => handleAceptarContraoferta(cotizacion.id_solicitud, cotizacion.monto_ofertado)}
+                                  onClick={() => handleAceptarContraoferta(cotizacion.id_solicitud, cotizacion.monto_ofertado, cotizacion.id_oferta)}
                                   className="btn-primary py-1.5 px-3 text-xs flex-1 bg-emerald-500 hover:bg-emerald-600 border-none"
                                 >
                                   Aceptar

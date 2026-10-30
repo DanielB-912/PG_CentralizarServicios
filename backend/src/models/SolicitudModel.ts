@@ -59,7 +59,7 @@ export class SolicitudModel {
               v.id_vinculacion, v.id_prestador, u.nombres as prestador_nombres, u.apellidos as prestador_apellidos, u.telefono as prestador_telefono,
               cal.id_calificacion,
               (cal.id_calificacion IS NOT NULL) AS calificado,
-              (SELECT COUNT(*) FROM ofertas o WHERE o.id_solicitud = s.id_solicitud AND o.estado_oferta IN ('PENDIENTE', 'RECOTIZADA')) as ofertas_pendientes
+              (SELECT COUNT(*) FROM ofertas o WHERE o.id_solicitud = s.id_solicitud AND o.estado_oferta IN ('PENDIENTE', 'RECOTIZADA', 'ENVIADA')) as ofertas_pendientes
        FROM solicitudes s
        LEFT JOIN vinculaciones v ON s.id_solicitud = v.id_solicitud
        LEFT JOIN calificaciones cal ON v.id_vinculacion = cal.id_vinculacion

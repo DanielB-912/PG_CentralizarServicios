@@ -29,6 +29,19 @@ export const ensureDatabaseSchema = async () => {
         console.log('[AutoMigrate] Columnas de cobertura ya existen. No se requiere migración.');
       }
 
+      // Check estado_oferta column in ofertas table to ensure NO_SELECCIONADA is supported
+      const [ofertaCols] = await connection.query<RowDataPacket[]>("SHOW COLUMNS FROM ofertas LIKE 'estado_oferta'");
+      if (ofertaCols.length > 0) {
+        const colType = String(ofertaCols[0].Type || '');
+        if (!colType.includes('NO_SELECCIONADA')) {
+          console.log('[AutoMigrate] Actualizando enum de estado_oferta en ofertas para incluir NO_SELECCIONADA y PENDIENTE...');
+          await connection.query(`ALTER TABLE ofertas 
+            MODIFY COLUMN estado_oferta ENUM('ENVIADA', 'RECHAZADA', 'ACEPTADA', 'CONTRAOFERTADA', 'NO_SELECCIONADA', 'PENDIENTE') DEFAULT 'ENVIADA'
+          `);
+          console.log('[AutoMigrate] Enum estado_oferta actualizado exitosamente.');
+        }
+      }
+
       return;
     }
 

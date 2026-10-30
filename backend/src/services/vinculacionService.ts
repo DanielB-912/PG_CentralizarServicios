@@ -6,7 +6,7 @@ import { SolicitudModel } from '../models/SolicitudModel';
 import { ConfiguracionModel } from '../models/ConfiguracionModel';
 
 export class VinculacionService {
-  static async aceptarOferta(id_solicitud: number, id_prestador: number, monto_ofertado: number): Promise<{ id_vinculacion: number, telefono_prestador: string, cliente_telefono: string, cliente_nombres: string, cliente_apellidos: string, latitud: number, longitud: number, direccion: string }> {
+  static async aceptarOferta(id_solicitud: number, id_prestador: number, monto_ofertado: number, id_oferta?: number): Promise<{ id_vinculacion: number, telefono_prestador: string, cliente_telefono: string, cliente_nombres: string, cliente_apellidos: string, latitud: number, longitud: number, direccion: string }> {
     const connection = await pool.getConnection();
     
     try {
@@ -68,11 +68,41 @@ export class VinculacionService {
         [id_solicitud]
       );
 
-      // actualiza estado de la oferta a ACEPTADA
-      await connection.execute(
-        `UPDATE ofertas SET estado_oferta = 'ACEPTADA' WHERE id_solicitud = ? AND id_prestador = ?`,
-        [id_solicitud, id_prestador]
-      );
+      // actualiza estado de la oferta seleccionada a ACEPTADA y las demás a NO_SELECCIONADA
+      let targetOfertaId = id_oferta;
+      if (!targetOfertaId) {
+        const [ofertaRows] = await connection.execute<any[]>(
+          `SELECT id_oferta FROM ofertas WHERE id_solicitud = ? AND id_prestador = ? ORDER BY fecha_oferta DESC LIMIT 1`,
+          [id_solicitud, id_prestador]
+        );
+        if (ofertaRows.length > 0) {
+          targetOfertaId = ofertaRows[0].id_oferta;
+        }
+      }
+
+      if (targetOfertaId) {
+        await connection.execute(
+          `UPDATE ofertas SET estado_oferta = 'ACEPTADA' WHERE id_oferta = ?`,
+          [targetOfertaId]
+        );
+        await connection.execute(
+          `UPDATE ofertas 
+           SET estado_oferta = 'NO_SELECCIONADA' 
+           WHERE id_solicitud = ? AND id_oferta != ? AND estado_oferta IN ('PENDIENTE', 'ENVIADA', 'CONTRAOFERTADA')`,
+          [id_solicitud, targetOfertaId]
+        );
+      } else {
+        await connection.execute(
+          `UPDATE ofertas SET estado_oferta = 'ACEPTADA' WHERE id_solicitud = ? AND id_prestador = ?`,
+          [id_solicitud, id_prestador]
+        );
+        await connection.execute(
+          `UPDATE ofertas 
+           SET estado_oferta = 'NO_SELECCIONADA' 
+           WHERE id_solicitud = ? AND id_prestador != ? AND estado_oferta IN ('PENDIENTE', 'ENVIADA', 'CONTRAOFERTADA')`,
+          [id_solicitud, id_prestador]
+        );
+      }
 
       // get client's full details and location
       const [clienteRows] = await connection.execute<any[]>(

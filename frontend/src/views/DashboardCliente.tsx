@@ -179,13 +179,14 @@ export const DashboardCliente = () => {
     }
   };
 
-  const handleAceptarOferta = async (id_solicitud: number, id_prestador: number, monto_ofertado: number) => {
+  const handleAceptarOferta = async (id_solicitud: number, id_prestador: number, monto_ofertado: number, id_oferta?: number) => {
     try {
       const token = localStorage.getItem('token');
       const res = await axios.post('/api/vinculaciones/aceptar', {
         id_solicitud,
         id_prestador,
-        monto_ofertado
+        monto_ofertado,
+        id_oferta
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -1075,7 +1076,7 @@ export const DashboardCliente = () => {
                                       </button>
                                       {oferta.estado_oferta !== 'CONTRAOFERTADA' ? (
                                         <button
-                                          onClick={() => handleAceptarOferta(sol.id_solicitud, oferta.id_prestador, oferta.monto_ofertado)}
+                                          onClick={() => handleAceptarOferta(sol.id_solicitud, oferta.id_prestador, oferta.monto_ofertado, oferta.id_oferta)}
                                           className="btn-primary py-1.5 px-3 text-xs flex-1"
                                         >
                                           Aceptar
